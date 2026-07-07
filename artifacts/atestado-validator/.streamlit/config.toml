@@ -1,0 +1,13 @@
+[server]
+port = 5000
+address = "0.0.0.0"
+headless = true
+# CORS e XSRF precisam estar desabilitados no Replit porque o preview é servido
+# via iframe num domínio diferente do servidor. Em produção fora do Replit,
+# habilite enableCORS = true e enableXsrfProtection = true e adicione
+# autenticação adequada antes de processar documentos reais.
+enableCORS = false
+enableXsrfProtection = false
+
+[browser]
+gatherUsageStats = false

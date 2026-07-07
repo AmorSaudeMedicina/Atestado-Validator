@@ -1,0 +1,6 @@
+streamlit
+pytesseract
+pyzbar
+opencv-python-headless
+pillow
+requests

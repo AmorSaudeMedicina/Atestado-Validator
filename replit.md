@@ -1,45 +1,53 @@
-# [Project name]
+# Validador de Atestados
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+Ferramenta de apoio à análise de atestados (médicos, odontológicos e de comparecimento). Processa documentos via QR Code e OCR para auxiliar equipes de RH/Auditoria — nunca emite veredito final.
 
 ## Run & Operate
 
-- `pnpm --filter @workspace/api-server run dev` — run the API server (port 5000)
-- `pnpm run typecheck` — full typecheck across all packages
-- `pnpm run build` — typecheck + build all packages
-- `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
-- `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- Required env: `DATABASE_URL` — Postgres connection string
+- `cd artifacts/atestado-validator && streamlit run app.py` — rodar o app Streamlit (porta 5000)
+- Workflow configurado: **"Validador de Atestados"**
+- Dependência de sistema: `tesseract` (instalado via Nix)
+- Dependências Python: ver `artifacts/atestado-validator/requirements.txt`
 
 ## Stack
 
-- pnpm workspaces, Node.js 24, TypeScript 5.9
-- API: Express 5
-- DB: PostgreSQL + Drizzle ORM
-- Validation: Zod (`zod/v4`), `drizzle-zod`
-- API codegen: Orval (from OpenAPI spec)
-- Build: esbuild (CJS bundle)
+- Python 3.11 + Streamlit
+- OCR: pytesseract (wrapper do Tesseract)
+- QR Code: pyzbar + opencv-python-headless
+- Imagens: Pillow
+- HTTP: requests
 
 ## Where things live
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+- `artifacts/atestado-validator/app.py` — ponto de entrada do Streamlit
+- `artifacts/atestado-validator/src/` — módulos de validação (esqueleto, a implementar)
+- `artifacts/atestado-validator/.streamlit/config.toml` — configuração do servidor
+- `artifacts/atestado-validator/samples/` — arquivos de teste sintéticos (NUNCA atestados reais)
+- `artifacts/atestado-validator/README.md` — documentação do projeto e fases
 
 ## Architecture decisions
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+- Validação principal via **QR Code** (consulta à fonte emissora); OCR é conferência cruzada e fallback.
+- Sistema de **apoio** humano — sem veredito automatizado de fraude.
+- Dados de saúde tratados como sensíveis (LGPD art. 11): sem persistência sem consentimento.
+- Módulos desacoplados para permitir desenvolvimento por fases independentes.
 
 ## Product
 
-_Describe the high-level user-facing capabilities of this app once they exist._
+Fase 1 (atual): esqueleto com upload de arquivo. Fases seguintes: leitura QR → consulta fonte → OCR → parsing → validação de campos → relatório de risco.
 
 ## User preferences
 
-_Populate as you build — explicit user instructions worth remembering across sessions._
+- App em Python/Streamlit — NÃO usar React ou JavaScript para este projeto.
+- Desenvolvimento incremental por fases.
+- Nome do app: "atestado-validator".
 
 ## Gotchas
 
-_Populate as you build — sharp edges, "always run X before Y" rules._
+- O `config.toml` do Streamlit já está configurado para `port=5000` e `address=0.0.0.0` — não alterar sem atualizar o workflow.
+- `samples/` é para arquivos sintéticos apenas — avisar usuário sobre LGPD.
+- Tesseract instalado via Nix (`tesseract`); pytesseract aponta automaticamente para ele.
 
 ## Pointers
 
-- See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details
+- Ver `artifacts/atestado-validator/README.md` para diagrama de fluxo e tabela de fases.
