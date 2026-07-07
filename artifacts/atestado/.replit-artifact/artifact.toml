@@ -1,0 +1,18 @@
+kind = "web"
+previewPath = "/"
+title = "Validador de Atestados"
+version = "1.0.0"
+id = "artifacts/atestado"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 18373
+
+[services.development]
+run = "streamlit run ../atestado-validator/app.py --server.port $PORT --server.address 0.0.0.0 --server.headless true --server.enableCORS false --server.enableXsrfProtection false"
+
+[services.env]
+PORT = "18373"
+BASE_PATH = "/"
