@@ -4,3 +4,4 @@ pyzbar
 opencv-python-headless
 pillow
 requests
+qrcode[pil]
