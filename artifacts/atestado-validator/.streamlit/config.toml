@@ -11,3 +11,14 @@ enableXsrfProtection = false
 
 [browser]
 gatherUsageStats = false
+
+[theme]
+# Tema claro forçado — identidade visual AmorSaúde.
+# Sem esta seção, o Streamlit segue o esquema de cores do sistema/navegador
+# do usuário, o que causava fundo escuro em navegadores com modo escuro ativo.
+base = "light"
+primaryColor = "#5FC2D4"
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#EAF7F9"
+textColor = "#525050"
+font = "sans serif"

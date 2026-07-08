@@ -11,12 +11,17 @@ e validação permanece intacta em src/.
 """
 
 import base64
+import csv
+import hashlib
+import html
+import io
 import os
 import secrets
 from datetime import date, timedelta
 from pathlib import Path
 
 import streamlit as st
+import streamlit.components.v1 as components
 
 from src.auth import MEDICOS_TESTE, autenticar
 from src.database import (
@@ -30,12 +35,13 @@ from src.qr_generator import gerar_qr
 # ---------------------------------------------------------------------------
 # Paleta oficial AmorSaúde
 # ---------------------------------------------------------------------------
-COR_PRIMARIA = "#5FC2D4"   # verde-água / teal — cor principal da marca
+COR_PRIMARIA = "#5FC2D4"    # verde-água / teal — cor principal da marca
 COR_SECUNDARIA = "#D74846"  # coral — destaques
 COR_CTA = "#D53A31"         # vermelho — botões de ação
 COR_TEXTO = "#525050"       # texto principal
 COR_FUNDO_CLARO = "#EAF7F9"  # fundo das seções
 COR_BRANCO = "#FFFFFF"
+COR_BORDA = "#D7ECEF"
 
 _LOGO_PATH = Path(__file__).resolve().parent / "assets" / "logo-amorsaude.png"
 
@@ -62,19 +68,65 @@ def _injetar_estilo() -> None:
     st.markdown(
         f"""
         <style>
+        /* Fundo geral da página */
         .stApp {{
-            background-color: {COR_FUNDO_CLARO};
+            background-color: {COR_FUNDO_CLARO} !important;
         }}
-        h1, h2, h3, h4, p, span, label, .stMarkdown {{
+        [data-testid="stAppViewContainer"], [data-testid="stHeader"] {{
+            background-color: {COR_FUNDO_CLARO} !important;
+        }}
+        [data-testid="stHeader"] {{
+            background-color: transparent !important;
+        }}
+        html, body, [class*="css"] {{
             color: {COR_TEXTO};
         }}
-        /* Cards com borda (st.container(border=True)) ganham sombra suave
-           e cantos arredondados em todas as telas */
+        h1, h2, h3, h4, p, span, label, .stMarkdown, .stCaption {{
+            color: {COR_TEXTO};
+        }}
+
+        /* Cards com borda (st.container(border=True)) — fundo branco, sombra suave */
         [data-testid="stVerticalBlockBorderWrapper"] {{
             border-radius: 14px !important;
             box-shadow: 0 2px 14px rgba(95, 194, 212, 0.15) !important;
             background-color: {COR_BRANCO} !important;
+            border-color: {COR_BORDA} !important;
         }}
+
+        /* Formulários — fundo branco, nunca escuro */
+        [data-testid="stForm"] {{
+            background-color: {COR_BRANCO} !important;
+            border-radius: 14px !important;
+            padding: 1.5rem !important;
+            border: 1px solid {COR_BORDA} !important;
+        }}
+
+        /* Campos de texto, número, data, seleção, textarea — fundo branco + texto escuro legível */
+        [data-testid="stTextInput"] input,
+        [data-testid="stNumberInput"] input,
+        [data-testid="stDateInput"] input,
+        [data-testid="stTextArea"] textarea,
+        [data-baseweb="input"],
+        [data-baseweb="select"] > div {{
+            background-color: {COR_BRANCO} !important;
+            color: {COR_TEXTO} !important;
+            border: 1px solid {COR_BORDA} !important;
+        }}
+        [data-testid="stTextInput"], [data-testid="stNumberInput"],
+        [data-testid="stDateInput"], [data-testid="stTextArea"] {{
+            background-color: transparent !important;
+        }}
+
+        /* Expander (credenciais de teste) */
+        [data-testid="stExpander"] {{
+            background-color: {COR_BRANCO} !important;
+            border: 1px solid {COR_BORDA} !important;
+            border-radius: 10px !important;
+        }}
+        [data-testid="stExpander"] summary {{
+            color: {COR_PRIMARIA} !important;
+        }}
+
         /* Botões primários (CTAs) — vermelho AmorSaúde */
         button[kind="primary"] {{
             background-color: {COR_CTA} !important;
@@ -85,8 +137,9 @@ def _injetar_estilo() -> None:
             background-color: #b8241c !important;
             border-color: #b8241c !important;
         }}
-        /* Botões secundários — contorno verde-água */
+        /* Botões secundários — contorno verde-água, fundo branco */
         button[kind="secondary"] {{
+            background-color: {COR_BRANCO} !important;
             border-color: {COR_PRIMARIA} !important;
             color: {COR_PRIMARIA} !important;
         }}
@@ -94,11 +147,16 @@ def _injetar_estilo() -> None:
             border-color: {COR_CTA} !important;
             color: {COR_CTA} !important;
         }}
+
         [data-testid="stMetricValue"] {{
             color: {COR_PRIMARIA} !important;
         }}
-        [data-testid="stExpander"] summary {{
-            color: {COR_PRIMARIA} !important;
+        [data-testid="stMetricLabel"] {{
+            color: {COR_TEXTO} !important;
+        }}
+
+        hr {{
+            border-color: {COR_BORDA} !important;
         }}
         </style>
         """,
@@ -114,7 +172,7 @@ def _logo_base64() -> str | None:
     return None
 
 
-def _logo_html(altura_px: int = 44, cor_fallback: str = COR_PRIMARIA) -> str:
+def _logo_html(altura_px: int = 48, cor_fallback: str = COR_PRIMARIA) -> str:
     """Tag <img> com a logo, ou texto 'AmorSaúde' estilizado se o arquivo não existir."""
     b64 = _logo_base64()
     if b64:
@@ -126,15 +184,15 @@ def _logo_html(altura_px: int = 44, cor_fallback: str = COR_PRIMARIA) -> str:
 
 
 def _barra_cabecalho(conteudo_direita: str = "") -> None:
-    """Barra de cabeçalho com fundo verde-água + logo, usada no dashboard e na verificação."""
+    """Barra de cabeçalho com fundo verde-água + logo à esquerda, usada no dashboard e na verificação."""
     st.markdown(
         f"""
-        <div style="background-color:{COR_PRIMARIA}; padding:1.1rem 1.5rem;
+        <div style="background-color:{COR_PRIMARIA}; padding:1.3rem 1.8rem;
                     border-radius:14px; display:flex; align-items:center;
-                    justify-content:space-between; margin-bottom:1.5rem;
+                    justify-content:space-between; margin-bottom:1.8rem; gap:1rem;
                     box-shadow:0 2px 10px rgba(0,0,0,0.08);">
-            <div style="display:flex; align-items:center; gap:0.9rem;">
-                {_logo_html(38, cor_fallback=COR_BRANCO)}
+            <div style="display:flex; align-items:center;">
+                {_logo_html(52, cor_fallback=COR_BRANCO)}
             </div>
             <div style="color:{COR_BRANCO}; text-align:right;">
                 {conteudo_direita}
@@ -158,6 +216,56 @@ def _caixa_mensagem(texto: str, cor_fundo: str, cor_texto: str = COR_BRANCO, ico
     )
 
 
+def _rodape() -> None:
+    st.markdown(
+        f"""
+        <div style="text-align:center; color:{COR_TEXTO}; opacity:0.6;
+                    font-size:0.8rem; padding:1.5rem 0 0.5rem 0;">
+            AmorSaúde — Validador de Atestados
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def _botao_copiar_link(url: str, chave: str) -> None:
+    """
+    Botão que copia a URL de verificação para a área de transferência via JS.
+
+    A URL nunca é interpolada dentro do bloco <script> — fica apenas num
+    atributo HTML (data-url) devidamente escapado com html.escape(), lido em
+    runtime via getAttribute. Isso evita que caracteres especiais (aspas,
+    `</script>`, tags) quebrem o HTML ou permitam injeção de script.
+    """
+    # `chave` (código do atestado) nunca é usado cru em HTML/JS: um id determinístico
+    # e seguro (hash hexadecimal) é derivado dele. A URL nunca entra no <script> —
+    # fica apenas num atributo HTML escapado (data-url) e é lida em runtime via
+    # getAttribute, eliminando qualquer risco de payload quebrar a tag <script>.
+    id_seguro = "btn-copiar-" + hashlib.sha256(chave.encode()).hexdigest()[:16]
+    url_escapada = html.escape(url, quote=True)
+    html_conteudo = f"""
+    <button id="{id_seguro}" data-url="{url_escapada}"
+            style="background-color:{COR_BRANCO}; color:{COR_PRIMARIA};
+                   border:1px solid {COR_PRIMARIA}; border-radius:6px;
+                   padding:0.42rem 0.6rem; cursor:pointer; font-size:0.82rem;
+                   width:100%; font-family:sans-serif;">
+        📋 Copiar link
+    </button>
+    <script>
+        (function() {{
+            var btn = document.getElementById("{id_seguro}");
+            btn.addEventListener("click", function() {{
+                var url = btn.getAttribute("data-url");
+                navigator.clipboard.writeText(url);
+                btn.innerText = "✅ Copiado!";
+                setTimeout(function() {{ btn.innerText = "📋 Copiar link"; }}, 1500);
+            }});
+        }})();
+    </script>
+    """
+    components.html(html_conteudo, height=42)
+
+
 _injetar_estilo()
 
 # ---------------------------------------------------------------------------
@@ -179,6 +287,29 @@ def _formatar_periodo(row: dict) -> str:
     if row.get("dias_afastamento"):
         return f"{row['dias_afastamento']} dia(s)"
     return "—"
+
+
+def _gerar_csv(atestados: list[dict]) -> bytes:
+    """Gera CSV (apenas apresentação/exportação — não altera a fonte de dados)."""
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(
+        ["Paciente", "CID", "Data de Emissão", "Início", "Fim", "Dias de Afastamento", "Código", "Status"]
+    )
+    for a in atestados:
+        writer.writerow(
+            [
+                a["nome_paciente"],
+                a["cid"],
+                a["data_emissao"],
+                a.get("data_inicio") or "",
+                a.get("data_fim") or "",
+                a.get("dias_afastamento") or "",
+                a["codigo"],
+                "Ativo",
+            ]
+        )
+    return buf.getvalue().encode("utf-8-sig")
 
 
 # ---------------------------------------------------------------------------
@@ -205,6 +336,7 @@ def tela_verificacao(codigo: str) -> None:
             "O código informado não corresponde a nenhum atestado em nossa base. "
             "Verifique se o QR Code foi lido corretamente e tente novamente."
         )
+        _rodape()
         return
 
     st.markdown(
@@ -225,6 +357,7 @@ def tela_verificacao(codigo: str) -> None:
             st.metric("Período de afastamento", _formatar_periodo(atestado))
 
     st.caption(f"Código do atestado: `{codigo}`")
+    _rodape()
 
 
 # ---------------------------------------------------------------------------
@@ -278,6 +411,8 @@ def tela_login() -> None:
                     else:
                         st.error("Usuário ou senha inválidos. Verifique as credenciais de teste acima.")
 
+    _rodape()
+
 
 # ---------------------------------------------------------------------------
 # TELA 3 — Dashboard do médico
@@ -287,8 +422,8 @@ def tela_dashboard() -> None:
     medico = st.session_state["medico"]
 
     conteudo_direita = (
-        f'<div style="font-size:1.15rem; font-weight:700;">{medico["nome"]}</div>'
-        f'<div style="font-size:0.85rem; opacity:0.9;">{medico["especialidade"]} · {medico["crm"]}</div>'
+        f'<div style="font-size:1.2rem; font-weight:700;">{medico["nome"]}</div>'
+        f'<div style="font-size:0.88rem; opacity:0.92;">{medico["especialidade"]} · {medico["crm"]}</div>'
     )
     _barra_cabecalho(conteudo_direita)
 
@@ -299,7 +434,7 @@ def tela_dashboard() -> None:
             st.rerun()
 
     # -----------------------------------------------------------------------
-    # Cartões de resumo
+    # Dados-base para os cartões e o gráfico (apenas leitura, sem alterar a fonte)
     # -----------------------------------------------------------------------
     atestados = listar_atestados_por_crm(medico["crm"])
 
@@ -309,24 +444,54 @@ def tela_dashboard() -> None:
         1 for a in atestados if a["data_emissao"][:7] == hoje.strftime("%Y-%m")
     )
     emitidos_hoje = sum(1 for a in atestados if a["data_emissao"] == str(hoje))
+    total_dias_afastamento = sum(a.get("dias_afastamento") or 0 for a in atestados)
+    pacientes_distintos = len({a["nome_paciente"].strip().lower() for a in atestados})
 
-    def _cartao_resumo(numero: int, rotulo: str) -> str:
+    def _cartao_resumo(icone: str, numero, rotulo: str) -> str:
         return f"""
         <div style="background:{COR_BRANCO}; border-top:4px solid {COR_PRIMARIA};
-                    border-radius:10px; padding:1.1rem; text-align:center;
-                    box-shadow:0 2px 10px rgba(0,0,0,0.06);">
-            <div style="font-size:2.1rem; font-weight:800; color:{COR_PRIMARIA};">{numero}</div>
-            <div style="color:{COR_TEXTO}; font-size:0.85rem; margin-top:0.2rem;">{rotulo}</div>
+                    border-radius:12px; padding:1.1rem 0.8rem; text-align:center;
+                    box-shadow:0 2px 10px rgba(0,0,0,0.06); height:100%;">
+            <div style="font-size:1.4rem;">{icone}</div>
+            <div style="font-size:1.9rem; font-weight:800; color:{COR_PRIMARIA}; line-height:1.2;">{numero}</div>
+            <div style="color:{COR_TEXTO}; font-size:0.8rem; margin-top:0.15rem;">{rotulo}</div>
         </div>
         """
 
-    col_r1, col_r2, col_r3 = st.columns(3)
+    st.markdown(
+        f'<h3 style="color:{COR_PRIMARIA}; margin-top:0.5rem;">📊 Visão geral</h3>',
+        unsafe_allow_html=True,
+    )
+
+    col_r1, col_r2, col_r3, col_r4, col_r5 = st.columns(5)
     with col_r1:
-        st.markdown(_cartao_resumo(total, "Total de Atestados"), unsafe_allow_html=True)
+        st.markdown(_cartao_resumo("📄", total, "Total de Atestados"), unsafe_allow_html=True)
     with col_r2:
-        st.markdown(_cartao_resumo(emitidos_este_mes, "Emitidos este mês"), unsafe_allow_html=True)
+        st.markdown(_cartao_resumo("📅", emitidos_este_mes, "Emitidos este mês"), unsafe_allow_html=True)
     with col_r3:
-        st.markdown(_cartao_resumo(emitidos_hoje, "Emitidos hoje"), unsafe_allow_html=True)
+        st.markdown(_cartao_resumo("☀️", emitidos_hoje, "Emitidos hoje"), unsafe_allow_html=True)
+    with col_r4:
+        st.markdown(_cartao_resumo("🛌", total_dias_afastamento, "Dias de afastamento concedidos"), unsafe_allow_html=True)
+    with col_r5:
+        st.markdown(_cartao_resumo("👥", pacientes_distintos, "Pacientes distintos"), unsafe_allow_html=True)
+
+    st.write("")
+
+    # -----------------------------------------------------------------------
+    # Gráfico — atestados emitidos por mês
+    # -----------------------------------------------------------------------
+    if atestados:
+        with st.container(border=True):
+            st.markdown(
+                f'<p style="color:{COR_TEXTO}; font-weight:600; margin-bottom:0.4rem;">Atestados emitidos por mês</p>',
+                unsafe_allow_html=True,
+            )
+            contagem_por_mes: dict[str, int] = {}
+            for a in atestados:
+                mes = a["data_emissao"][:7]
+                contagem_por_mes[mes] = contagem_por_mes.get(mes, 0) + 1
+            meses_ordenados = dict(sorted(contagem_por_mes.items()))
+            st.bar_chart(meses_ordenados, color=COR_PRIMARIA, use_container_width=True)
 
     st.write("")
     st.divider()
@@ -465,7 +630,20 @@ def tela_dashboard() -> None:
     # -----------------------------------------------------------------------
     # Seção: Atestados emitidos
     # -----------------------------------------------------------------------
-    st.markdown(f'<h3 style="color:{COR_PRIMARIA};">📁 Atestados emitidos por você</h3>', unsafe_allow_html=True)
+    col_titulo_lista, col_export = st.columns([4, 1.4])
+    with col_titulo_lista:
+        st.markdown(f'<h3 style="color:{COR_PRIMARIA};">📁 Atestados emitidos por você</h3>', unsafe_allow_html=True)
+    with col_export:
+        if atestados:
+            st.write("")
+            st.download_button(
+                "⬇️ Exportar CSV",
+                data=_gerar_csv(atestados),
+                file_name=f"atestados_{medico['crm'].replace(' ', '_')}.csv",
+                mime="text/csv",
+                use_container_width=True,
+                type="secondary",
+            )
 
     busca = st.text_input(
         "🔍 Buscar por nome do paciente",
@@ -484,36 +662,45 @@ def tela_dashboard() -> None:
     else:
         st.caption(f"{len(atestados_filtrados)} de {len(atestados)} atestado(s)")
 
-        col_h1, col_h2, col_h3, col_h4, col_h5 = st.columns([3, 1.3, 1.8, 1.8, 1.4])
-        for col, rotulo in zip(
-            (col_h1, col_h2, col_h3, col_h4, col_h5),
-            ("Paciente", "CID", "Data de Emissão", "Dias de Afastamento", ""),
-        ):
-            col.markdown(f'<span style="color:{COR_PRIMARIA}; font-weight:700;">{rotulo}</span>', unsafe_allow_html=True)
-
         for a in atestados_filtrados:
-            col_1, col_2, col_3, col_4, col_5 = st.columns([3, 1.3, 1.8, 1.8, 1.4])
-            col_1.write(a["nome_paciente"])
-            col_2.write(a["cid"])
-            col_3.write(a["data_emissao"])
-            col_4.write(str(a["dias_afastamento"]) if a["dias_afastamento"] else "—")
+            with st.container(border=True):
+                col_a, col_b = st.columns([3, 1.2])
+                with col_a:
+                    st.markdown(
+                        f'<span style="font-size:1.05rem; font-weight:700; color:{COR_TEXTO};">'
+                        f'{html.escape(a["nome_paciente"])}</span>',
+                        unsafe_allow_html=True,
+                    )
+                with col_b:
+                    st.markdown(
+                        f'<span style="background:{COR_FUNDO_CLARO}; color:{COR_PRIMARIA}; '
+                        f'padding:0.2rem 0.6rem; border-radius:20px; font-size:0.78rem; font-weight:700;">● Ativo</span>',
+                        unsafe_allow_html=True,
+                    )
 
-            chave_toggle = f"mostrar_qr_{a['codigo']}"
-            with col_5:
-                if st.button("Ver QR", key=f"btn_qr_{a['codigo']}", use_container_width=True, type="secondary"):
-                    st.session_state[chave_toggle] = not st.session_state.get(chave_toggle, False)
+                col_1, col_2, col_3, col_4 = st.columns(4)
+                col_1.markdown(f"**CID**  \n{a['cid']}")
+                col_2.markdown(f"**Emissão**  \n{a['data_emissao']}")
+                col_3.markdown(f"**Período**  \n{_formatar_periodo(a)}")
+                col_4.markdown(f"**Código**  \n`{a['codigo'][:8]}…`")
 
-            if st.session_state.get(chave_toggle):
-                url = f"{_url_base()}?codigo={a['codigo']}"
-                qr_mini = gerar_qr(url, tamanho_caixa=6, borda=2)
-                col_vazia1, col_qr_meio, col_vazia2 = st.columns([1, 1, 1])
-                with col_qr_meio:
-                    st.image(qr_mini, caption=f"QR — {a['nome_paciente']}", use_container_width=True)
+                chave_toggle = f"mostrar_qr_{a['codigo']}"
+                col_btn1, col_btn2 = st.columns(2)
+                with col_btn1:
+                    rotulo_qr = "Ocultar QR" if st.session_state.get(chave_toggle) else "🔳 Ver QR"
+                    if st.button(rotulo_qr, key=f"btn_qr_{a['codigo']}", use_container_width=True, type="secondary"):
+                        st.session_state[chave_toggle] = not st.session_state.get(chave_toggle, False)
+                with col_btn2:
+                    url = f"{_url_base()}?codigo={a['codigo']}"
+                    _botao_copiar_link(url, chave=a["codigo"])
 
-            st.markdown(
-                '<hr style="margin:0.4rem 0; border:none; border-top:1px solid #e0eef0;">',
-                unsafe_allow_html=True,
-            )
+                if st.session_state.get(chave_toggle):
+                    qr_mini = gerar_qr(url, tamanho_caixa=6, borda=2)
+                    col_vazia1, col_qr_meio, col_vazia2 = st.columns([1, 1, 1])
+                    with col_qr_meio:
+                        st.image(qr_mini, caption=f"QR — {a['nome_paciente']}", use_container_width=True)
+
+    _rodape()
 
 
 # ---------------------------------------------------------------------------
