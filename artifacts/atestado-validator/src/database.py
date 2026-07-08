@@ -25,9 +25,20 @@ CREATE TABLE IF NOT EXISTS atestados (
     data_inicio      TEXT,
     data_fim         TEXT,
     dias_afastamento INTEGER,
+    status           TEXT    NOT NULL DEFAULT 'ativo',
+    revogado_em      TEXT,
     criado_em        TEXT    NOT NULL DEFAULT (datetime('now','localtime'))
 )
 """
+
+# Colunas adicionadas depois da criação inicial do banco. Cada entrada é
+# aplicada via ALTER TABLE apenas se a coluna ainda não existir, para nunca
+# apagar ou recriar os registros já existentes — eles simplesmente passam a
+# ter os novos campos com o valor padrão (status='ativo', revogado_em=NULL).
+_MIGRACOES_COLUNAS = [
+    ("status", "TEXT NOT NULL DEFAULT 'ativo'"),
+    ("revogado_em", "TEXT"),
+]
 
 
 def _conectar() -> sqlite3.Connection:
@@ -45,9 +56,21 @@ def _conectar() -> sqlite3.Connection:
 
 
 def init_db() -> None:
-    """Cria as tabelas se ainda não existirem."""
+    """
+    Cria as tabelas se ainda não existirem e aplica migrações de colunas novas.
+
+    A migração usa ALTER TABLE ADD COLUMN — nunca DROP/CREATE — então atestados
+    já gravados permanecem intactos e simplesmente herdam os valores padrão
+    das colunas novas (status='ativo', revogado_em=NULL).
+    """
     with _conectar() as conn:
         conn.execute(_CREATE_TABLE)
+        colunas_existentes = {
+            linha["name"] for linha in conn.execute("PRAGMA table_info(atestados)")
+        }
+        for nome_coluna, definicao_sql in _MIGRACOES_COLUNAS:
+            if nome_coluna not in colunas_existentes:
+                conn.execute(f"ALTER TABLE atestados ADD COLUMN {nome_coluna} {definicao_sql}")
         conn.commit()
 
 
@@ -92,3 +115,24 @@ def listar_atestados_por_crm(crm: str) -> list[dict]:
     with _conectar() as conn:
         rows = conn.execute(sql, (crm,)).fetchall()
     return [dict(r) for r in rows]
+
+
+def revogar_atestado(codigo: str, crm: str) -> bool:
+    """
+    Marca um atestado como 'revogado' com a data/hora atual.
+
+    Só tem efeito se o atestado existir, pertencer ao médico informado (mesmo
+    `crm`) e ainda estiver 'ativo' — isso impede que um médico revogue
+    atestados de outro colega e evita sobrescrever a data de uma revogação
+    já feita. Retorna True se o atestado foi revogado agora, False caso
+    contrário (não encontrado, não pertence a esse CRM, ou já revogado).
+    """
+    sql = """
+        UPDATE atestados
+        SET status = 'revogado', revogado_em = datetime('now','localtime')
+        WHERE codigo = ? AND crm = ? AND status = 'ativo'
+    """
+    with _conectar() as conn:
+        cursor = conn.execute(sql, (codigo, crm))
+        conn.commit()
+        return cursor.rowcount > 0

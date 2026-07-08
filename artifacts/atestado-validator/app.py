@@ -28,6 +28,7 @@ from src.database import (
     buscar_atestado_por_codigo,
     init_db,
     listar_atestados_por_crm,
+    revogar_atestado,
     salvar_atestado,
 )
 from src.qr_generator import gerar_qr
@@ -176,7 +177,11 @@ def _logo_html(altura_px: int = 48, cor_fallback: str = COR_PRIMARIA) -> str:
     """Tag <img> com a logo, ou texto 'AmorSaúde' estilizado se o arquivo não existir."""
     b64 = _logo_base64()
     if b64:
-        return f'<img src="data:image/png;base64,{b64}" style="height:{altura_px}px;" alt="AmorSaúde" />'
+        return (
+            f'<img src="data:image/png;base64,{b64}" '
+            f'style="height:{altura_px}px; width:auto; max-width:none; display:block;" '
+            f'alt="AmorSaúde" />'
+        )
     return (
         f'<span style="font-size:{altura_px * 0.55}px; font-weight:800; '
         f'color:{cor_fallback}; font-family:sans-serif;">AmorSaúde</span>'
@@ -184,23 +189,32 @@ def _logo_html(altura_px: int = 48, cor_fallback: str = COR_PRIMARIA) -> str:
 
 
 def _barra_cabecalho(conteudo_direita: str = "") -> None:
-    """Barra de cabeçalho com fundo verde-água + logo à esquerda, usada no dashboard e na verificação."""
-    st.markdown(
-        f"""
-        <div style="background-color:{COR_PRIMARIA}; padding:1.3rem 1.8rem;
-                    border-radius:14px; display:flex; align-items:center;
-                    justify-content:space-between; margin-bottom:1.8rem; gap:1rem;
-                    box-shadow:0 2px 10px rgba(0,0,0,0.08);">
-            <div style="display:flex; align-items:center;">
-                {_logo_html(52, cor_fallback=COR_BRANCO)}
-            </div>
-            <div style="color:{COR_BRANCO}; text-align:right;">
-                {conteudo_direita}
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
+    """
+    Barra de cabeçalho com fundo verde-água + logo à esquerda, usada no dashboard e na verificação.
+
+    Construída como uma única linha (sem quebras/indentação entre as tags).
+    Quando `conteudo_direita` vem vazio (tela de verificação), uma versão
+    indentada e multi-linha faz o Markdown do Streamlit interpretar a linha
+    em branco + `</div>` indentado como um bloco de código, exibindo o texto
+    "</div>" na tela. Uma única linha elimina essa ambiguidade.
+    """
+    # A logo tem a palavra "amor" na mesma cor verde-água da marca — sobre o
+    # fundo teal do cabeçalho ela ficaria "invisível" (mesma cor do fundo).
+    # Por isso a logo fica sobre uma placa branca, como no cartão de login.
+    html_str = (
+        f'<div style="background-color:{COR_PRIMARIA}; padding:1.3rem 1.8rem; '
+        f'border-radius:14px; display:flex; align-items:center; '
+        f'justify-content:space-between; margin-bottom:1.8rem; gap:1rem; '
+        f'box-shadow:0 2px 10px rgba(0,0,0,0.08);">'
+        f'<div style="background-color:{COR_BRANCO}; border-radius:10px; '
+        f'padding:0.45rem 0.9rem; display:flex; align-items:center; '
+        f'min-width:0; flex-shrink:0;">'
+        f'{_logo_html(40, cor_fallback=COR_PRIMARIA)}'
+        f'</div>'
+        f'<div style="color:{COR_BRANCO}; text-align:right;">{conteudo_direita}</div>'
+        f'</div>'
     )
+    st.markdown(html_str, unsafe_allow_html=True)
 
 
 def _caixa_mensagem(texto: str, cor_fundo: str, cor_texto: str = COR_BRANCO, icone: str = "") -> None:
@@ -339,10 +353,25 @@ def tela_verificacao(codigo: str) -> None:
         _rodape()
         return
 
-    st.markdown(
-        f'<h2 style="color:{COR_PRIMARIA};">✅ Atestado Autêntico</h2>',
-        unsafe_allow_html=True,
-    )
+    status = atestado.get("status") or "ativo"
+
+    if status == "revogado":
+        st.markdown(
+            f'<h2 style="color:{COR_SECUNDARIA};">🚫 Atestado REVOGADO — não é mais válido</h2>',
+            unsafe_allow_html=True,
+        )
+        revogado_em = atestado.get("revogado_em")
+        _caixa_mensagem(
+            f"Este atestado foi revogado pelo médico emissor{f' em {revogado_em}' if revogado_em else ''} "
+            "e não deve mais ser aceito como comprovante válido.",
+            cor_fundo=COR_SECUNDARIA,
+            icone="⚠️",
+        )
+    else:
+        st.markdown(
+            f'<h2 style="color:{COR_PRIMARIA};">✅ Atestado Autêntico</h2>',
+            unsafe_allow_html=True,
+        )
     st.caption("Consulta pública — nenhum dado pessoal seu é registrado nesta verificação.")
 
     with st.container(border=True):
@@ -432,6 +461,10 @@ def tela_dashboard() -> None:
         if st.button("Sair", use_container_width=True, type="secondary"):
             del st.session_state["medico"]
             st.rerun()
+
+    erro_revogacao = st.session_state.pop("erro_revogacao", None)
+    if erro_revogacao:
+        _caixa_mensagem(erro_revogacao, cor_fundo=COR_SECUNDARIA, icone="⚠️")
 
     # -----------------------------------------------------------------------
     # Dados-base para os cartões e o gráfico (apenas leitura, sem alterar a fonte)
@@ -663,6 +696,10 @@ def tela_dashboard() -> None:
         st.caption(f"{len(atestados_filtrados)} de {len(atestados)} atestado(s)")
 
         for a in atestados_filtrados:
+            codigo_atestado = a["codigo"]
+            status_atestado = a.get("status") or "ativo"
+            chave_confirmacao = f"confirmar_revogar_{codigo_atestado}"
+
             with st.container(border=True):
                 col_a, col_b = st.columns([3, 1.2])
                 with col_a:
@@ -672,27 +709,89 @@ def tela_dashboard() -> None:
                         unsafe_allow_html=True,
                     )
                 with col_b:
-                    st.markdown(
-                        f'<span style="background:{COR_FUNDO_CLARO}; color:{COR_PRIMARIA}; '
-                        f'padding:0.2rem 0.6rem; border-radius:20px; font-size:0.78rem; font-weight:700;">● Ativo</span>',
-                        unsafe_allow_html=True,
-                    )
+                    if status_atestado == "revogado":
+                        st.markdown(
+                            f'<span style="background:#FBEAEA; color:{COR_SECUNDARIA}; '
+                            f'padding:0.2rem 0.6rem; border-radius:20px; font-size:0.78rem; font-weight:700;">'
+                            f'● Revogado</span>',
+                            unsafe_allow_html=True,
+                        )
+                    else:
+                        st.markdown(
+                            f'<span style="background:{COR_FUNDO_CLARO}; color:{COR_PRIMARIA}; '
+                            f'padding:0.2rem 0.6rem; border-radius:20px; font-size:0.78rem; font-weight:700;">● Ativo</span>',
+                            unsafe_allow_html=True,
+                        )
 
                 col_1, col_2, col_3, col_4 = st.columns(4)
                 col_1.markdown(f"**CID**  \n{a['cid']}")
                 col_2.markdown(f"**Emissão**  \n{a['data_emissao']}")
                 col_3.markdown(f"**Período**  \n{_formatar_periodo(a)}")
-                col_4.markdown(f"**Código**  \n`{a['codigo'][:8]}…`")
+                col_4.markdown(f"**Código**  \n`{codigo_atestado[:8]}…`")
 
-                chave_toggle = f"mostrar_qr_{a['codigo']}"
-                col_btn1, col_btn2 = st.columns(2)
-                with col_btn1:
-                    rotulo_qr = "Ocultar QR" if st.session_state.get(chave_toggle) else "🔳 Ver QR"
-                    if st.button(rotulo_qr, key=f"btn_qr_{a['codigo']}", use_container_width=True, type="secondary"):
-                        st.session_state[chave_toggle] = not st.session_state.get(chave_toggle, False)
-                with col_btn2:
-                    url = f"{_url_base()}?codigo={a['codigo']}"
-                    _botao_copiar_link(url, chave=a["codigo"])
+                chave_toggle = f"mostrar_qr_{codigo_atestado}"
+                url = f"{_url_base()}?codigo={codigo_atestado}"
+
+                if status_atestado == "revogado":
+                    col_btn1, col_btn2 = st.columns(2)
+                    with col_btn1:
+                        rotulo_qr = "Ocultar QR" if st.session_state.get(chave_toggle) else "🔳 Ver QR"
+                        if st.button(rotulo_qr, key=f"btn_qr_{codigo_atestado}", use_container_width=True, type="secondary"):
+                            st.session_state[chave_toggle] = not st.session_state.get(chave_toggle, False)
+                    with col_btn2:
+                        _botao_copiar_link(url, chave=codigo_atestado)
+                    st.markdown(
+                        f'<p style="color:{COR_SECUNDARIA}; font-size:0.82rem; font-weight:600; margin-top:0.5rem;">'
+                        f'🚫 Revogado em {html.escape(str(a.get("revogado_em") or ""))}</p>',
+                        unsafe_allow_html=True,
+                    )
+                elif st.session_state.get(chave_confirmacao):
+                    st.warning(
+                        "⚠️ Tem certeza que deseja revogar este atestado? Esta ação não pode ser desfeita.",
+                        icon="⚠️",
+                    )
+                    col_conf1, col_conf2 = st.columns(2)
+                    with col_conf1:
+                        if st.button(
+                            "✅ Sim, revogar atestado",
+                            key=f"confirmar_sim_{codigo_atestado}",
+                            use_container_width=True,
+                            type="primary",
+                        ):
+                            sucesso = revogar_atestado(codigo_atestado, medico["crm"])
+                            st.session_state.pop(chave_confirmacao, None)
+                            if not sucesso:
+                                st.session_state["erro_revogacao"] = (
+                                    "Não foi possível revogar este atestado — "
+                                    "ele já pode ter sido revogado nesse meio tempo."
+                                )
+                            st.rerun()
+                    with col_conf2:
+                        if st.button(
+                            "Cancelar",
+                            key=f"confirmar_nao_{codigo_atestado}",
+                            use_container_width=True,
+                            type="secondary",
+                        ):
+                            st.session_state.pop(chave_confirmacao, None)
+                            st.rerun()
+                else:
+                    col_btn1, col_btn2, col_btn3 = st.columns(3)
+                    with col_btn1:
+                        rotulo_qr = "Ocultar QR" if st.session_state.get(chave_toggle) else "🔳 Ver QR"
+                        if st.button(rotulo_qr, key=f"btn_qr_{codigo_atestado}", use_container_width=True, type="secondary"):
+                            st.session_state[chave_toggle] = not st.session_state.get(chave_toggle, False)
+                    with col_btn2:
+                        _botao_copiar_link(url, chave=codigo_atestado)
+                    with col_btn3:
+                        if st.button(
+                            "🚫 Revogar atestado",
+                            key=f"revogar_{codigo_atestado}",
+                            use_container_width=True,
+                            type="primary",
+                        ):
+                            st.session_state[chave_confirmacao] = True
+                            st.rerun()
 
                 if st.session_state.get(chave_toggle):
                     qr_mini = gerar_qr(url, tamanho_caixa=6, borda=2)
