@@ -17,7 +17,7 @@ import html
 import io
 import os
 import secrets
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 import streamlit as st
@@ -43,6 +43,8 @@ COR_TEXTO = "#525050"       # texto principal
 COR_FUNDO_CLARO = "#EAF7F9"  # fundo das seções
 COR_BRANCO = "#FFFFFF"
 COR_BORDA = "#D7ECEF"
+COR_AMBAR = "#B9770E"       # âmbar neutro — usado apenas no estado "não encontrado"
+COR_AMBAR_FUNDO = "#FDF2E3"
 
 _LOGO_PATH = Path(__file__).resolve().parent / "assets" / "logo-amorsaude.png"
 
@@ -159,6 +161,19 @@ def _injetar_estilo() -> None:
         hr {{
             border-color: {COR_BORDA} !important;
         }}
+
+        /* Impressão — página de verificação: some com o cromo do Streamlit e
+           com os controles que não fazem sentido num comprovante impresso. */
+        @media print {{
+            [data-testid="stToolbar"], [data-testid="stStatusWidget"],
+            [data-testid="stDecoration"], header[data-testid="stHeader"],
+            .amorsaude-nao-imprimir {{
+                display: none !important;
+            }}
+            .stApp {{
+                background-color: {COR_BRANCO} !important;
+            }}
+        }}
         </style>
         """,
         unsafe_allow_html=True,
@@ -228,6 +243,112 @@ def _caixa_mensagem(texto: str, cor_fundo: str, cor_texto: str = COR_BRANCO, ico
         """,
         unsafe_allow_html=True,
     )
+
+
+def _selo_status(icone: str, titulo: str, cor: str, cor_fundo: str, subtitulo: str = "") -> None:
+    """Selo grande e inequívoco de status, no padrão de validadores oficiais (gov.br/ITI, Atesta CFM).
+
+    `subtitulo` é sempre escapado aqui — hardening defensivo, mesmo que os
+    chamadores atuais já escapem valores dinâmicos (ex.: revogado_em) antes
+    de passá-los, para evitar regressões se um novo call site esquecer disso.
+    """
+    subtitulo_html = (
+        f'<p style="color:{COR_TEXTO}; font-size:0.95rem; max-width:32rem; '
+        f'margin:0.5rem auto 0 auto;">{html.escape(subtitulo)}</p>'
+        if subtitulo
+        else ""
+    )
+    st.markdown(
+        f"""
+        <div style="text-align:center; padding:1.6rem 1rem 0.6rem 1rem;">
+            <div style="width:76px; height:76px; border-radius:50%; background-color:{cor_fundo};
+                        display:flex; align-items:center; justify-content:center; margin:0 auto 1rem auto;
+                        font-size:2.3rem; line-height:1;">
+                {icone}
+            </div>
+            <h1 style="color:{cor}; margin:0; font-size:1.55rem; font-weight:800;">{titulo}</h1>
+            {subtitulo_html}
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def _frase_confianca() -> None:
+    st.markdown(
+        f"""
+        <p style="text-align:center; color:{COR_TEXTO}; opacity:0.85; font-size:0.9rem;
+                  margin:0 0 1.4rem 0;">
+            🛡️ Atestado emitido e registrado na plataforma AmorSaúde
+        </p>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def _bloco_metadados_verificacao(codigo: str, rotulo_codigo: str = "Código de autenticação") -> None:
+    """Bloco discreto de metadados da consulta, no padrão de recibo de verificação oficial."""
+    agora = datetime.now().strftime("%d/%m/%Y às %H:%M:%S")
+    st.markdown(
+        f"""
+        <div style="background-color:{COR_FUNDO_CLARO}; border:1px solid {COR_BORDA};
+                    border-radius:10px; padding:0.85rem 1.1rem; margin-top:1rem; font-size:0.82rem;
+                    color:{COR_TEXTO};">
+            <div style="display:flex; justify-content:space-between; flex-wrap:wrap; gap:0.4rem 1rem;">
+                <span><strong>Verificado em:</strong> {agora}</span>
+                <span style="word-break:break-all;"><strong>{rotulo_codigo}:</strong> <code>{html.escape(codigo)}</code></span>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def _campo_dado(rotulo: str, valor: str) -> None:
+    """Par rótulo/valor sem truncar texto longo (ao contrário de st.metric)."""
+    st.markdown(
+        f"""
+        <div style="margin-bottom:1rem;">
+            <div style="color:{COR_TEXTO}; opacity:0.7; font-size:0.82rem; margin-bottom:0.15rem;">{rotulo}</div>
+            <div style="color:{COR_TEXTO}; font-size:1.35rem; font-weight:700; line-height:1.25;
+                        word-break:break-word;">{html.escape(str(valor))}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def _bloco_como_funciona() -> None:
+    st.markdown(
+        f"""
+        <div style="background-color:{COR_BRANCO}; border:1px solid {COR_BORDA}; border-radius:12px;
+                    padding:1rem 1.2rem; margin-top:1rem; font-size:0.85rem; color:{COR_TEXTO};">
+            <strong>🔎 Como funciona esta verificação</strong><br/><br/>
+            A autenticidade deste atestado é confirmada diretamente na fonte — a base de dados da
+            plataforma AmorSaúde — a cada consulta feita por este link ou QR Code. Nenhum dado de quem
+            realiza esta consulta é coletado ou armazenado.
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def _botao_imprimir() -> None:
+    """Botão que abre a caixa de impressão do navegador para gerar um comprovante limpo."""
+    html_conteudo = f"""
+    <button id="btn-imprimir-comprovante"
+            style="background-color:{COR_BRANCO}; color:{COR_PRIMARIA}; border:1px solid {COR_PRIMARIA};
+                   border-radius:8px; padding:0.55rem 1rem; cursor:pointer; font-size:0.88rem;
+                   font-weight:600; width:100%; font-family:sans-serif;">
+        🖨️ Imprimir comprovante
+    </button>
+    <script>
+        document.getElementById("btn-imprimir-comprovante").addEventListener("click", function() {{
+            window.parent.print();
+        }});
+    </script>
+    """
+    components.html(html_conteudo, height=48)
 
 
 def _rodape() -> None:
@@ -336,56 +457,75 @@ def tela_verificacao(codigo: str) -> None:
     with st.spinner("Consultando banco de dados…"):
         atestado = buscar_atestado_por_codigo(codigo)
 
-    if atestado is None:
-        st.markdown(
-            f'<h2 style="color:{COR_SECUNDARIA};">Verificação de Atestado</h2>',
-            unsafe_allow_html=True,
-        )
-        _caixa_mensagem(
-            "Atestado não encontrado ou código inválido.",
-            cor_fundo=COR_SECUNDARIA,
-            icone="❌",
-        )
-        st.markdown(
-            "O código informado não corresponde a nenhum atestado em nossa base. "
-            "Verifique se o QR Code foi lido corretamente e tente novamente."
-        )
-        _rodape()
-        return
+    col_esq, col_centro, col_dir = st.columns([1, 6, 1])
+    with col_centro:
+        with st.container(border=True):
+            if atestado is None:
+                _selo_status(
+                    icone="⚠️",
+                    titulo="Atestado não encontrado",
+                    cor=COR_AMBAR,
+                    cor_fundo=COR_AMBAR_FUNDO,
+                    subtitulo=(
+                        "O código informado não corresponde a nenhum atestado em nossa base. "
+                        "Confira se o QR Code foi lido corretamente ou se o link está completo."
+                    ),
+                )
+                st.divider()
+                _bloco_metadados_verificacao(codigo, rotulo_codigo="Código consultado")
+            else:
+                status = atestado.get("status") or "ativo"
+                revogado_em = atestado.get("revogado_em")
 
-    status = atestado.get("status") or "ativo"
+                if status == "revogado":
+                    # _selo_status escapa `subtitulo` internamente — não escapar aqui
+                    # de novo, senão o texto apareceria com entidades HTML duplicadas.
+                    _selo_status(
+                        icone="🚫",
+                        titulo="Atestado Revogado — não é mais válido",
+                        cor=COR_SECUNDARIA,
+                        cor_fundo="#FBEAEA",
+                        subtitulo=(
+                            f"Revogado pelo médico emissor em {revogado_em}."
+                            if revogado_em
+                            else "Este atestado foi revogado pelo médico emissor."
+                        ),
+                    )
+                else:
+                    _selo_status(
+                        icone="✅",
+                        titulo="Atestado Autêntico",
+                        cor=COR_PRIMARIA,
+                        cor_fundo=COR_FUNDO_CLARO,
+                    )
 
-    if status == "revogado":
-        st.markdown(
-            f'<h2 style="color:{COR_SECUNDARIA};">🚫 Atestado REVOGADO — não é mais válido</h2>',
-            unsafe_allow_html=True,
-        )
-        revogado_em = atestado.get("revogado_em")
-        _caixa_mensagem(
-            f"Este atestado foi revogado pelo médico emissor{f' em {revogado_em}' if revogado_em else ''} "
-            "e não deve mais ser aceito como comprovante válido.",
-            cor_fundo=COR_SECUNDARIA,
-            icone="⚠️",
-        )
-    else:
-        st.markdown(
-            f'<h2 style="color:{COR_PRIMARIA};">✅ Atestado Autêntico</h2>',
-            unsafe_allow_html=True,
-        )
-    st.caption("Consulta pública — nenhum dado pessoal seu é registrado nesta verificação.")
+                _frase_confianca()
 
-    with st.container(border=True):
-        col1, col2 = st.columns(2)
-        with col1:
-            st.metric("Médico", atestado["nome_medico"])
-            st.metric("CRM", atestado["crm"])
-            st.metric("Data de emissão", atestado["data_emissao"])
-        with col2:
-            st.metric("Paciente", atestado["nome_paciente"])
-            st.metric("CID", atestado["cid"])
-            st.metric("Período de afastamento", _formatar_periodo(atestado))
+                st.markdown(
+                    f'<p style="color:{COR_TEXTO}; font-weight:700; margin-bottom:0.2rem;">'
+                    f'Dados validados</p>',
+                    unsafe_allow_html=True,
+                )
+                with st.container(border=True):
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        _campo_dado("Médico", atestado["nome_medico"])
+                        _campo_dado("CRM", atestado["crm"])
+                        _campo_dado("Data de emissão", atestado["data_emissao"])
+                    with col2:
+                        _campo_dado("Paciente", atestado["nome_paciente"])
+                        _campo_dado("Diagnóstico (CID)", "🔒 Protegido por sigilo médico")
+                        _campo_dado("Período de afastamento", _formatar_periodo(atestado))
 
-    st.caption(f"Código do atestado: `{codigo}`")
+                _bloco_metadados_verificacao(codigo)
+
+                st.markdown('<div class="amorsaude-nao-imprimir">', unsafe_allow_html=True)
+                st.write("")
+                _botao_imprimir()
+                st.markdown("</div>", unsafe_allow_html=True)
+
+            _bloco_como_funciona()
+
     _rodape()
 
 
