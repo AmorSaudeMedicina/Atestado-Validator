@@ -40,6 +40,29 @@ _MIGRACOES_COLUNAS = [
     ("revogado_em", "TEXT"),
 ]
 
+_CREATE_USUARIOS = """
+CREATE TABLE IF NOT EXISTS usuarios (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    usuario             TEXT    UNIQUE NOT NULL,
+    senha_hash          TEXT    NOT NULL,
+    nome                TEXT    NOT NULL,
+    perfil              TEXT    NOT NULL CHECK (perfil IN ('admin','medico')),
+    crm                 TEXT,
+    especialidade       TEXT,
+    ativo               INTEGER NOT NULL DEFAULT 1,
+    criado_em           TEXT    NOT NULL DEFAULT (datetime('now','localtime')),
+    -- Campos reservados para funcionalidades futuras (não usados ainda):
+    -- verificação de CRM junto ao CFM, confirmação de e-mail e recuperação
+    -- de senha por e-mail. Deixados aqui apenas para não exigir migração
+    -- de schema quando essas fases forem implementadas.
+    email               TEXT,
+    email_verificado    INTEGER NOT NULL DEFAULT 0,
+    crm_verificado_cfm  INTEGER NOT NULL DEFAULT 0,
+    reset_senha_token   TEXT,
+    reset_senha_expira  TEXT
+)
+"""
+
 
 def _conectar() -> sqlite3.Connection:
     """
@@ -71,7 +94,89 @@ def init_db() -> None:
         for nome_coluna, definicao_sql in _MIGRACOES_COLUNAS:
             if nome_coluna not in colunas_existentes:
                 conn.execute(f"ALTER TABLE atestados ADD COLUMN {nome_coluna} {definicao_sql}")
+        conn.execute(_CREATE_USUARIOS)
         conn.commit()
+
+
+# ---------------------------------------------------------------------------
+# Usuários (administradores e médicos) — autenticação e gestão de contas
+# ---------------------------------------------------------------------------
+#
+# Esta camada nunca lida com senha em texto puro nem calcula hash — ela apenas
+# grava/lê o hash que já vem pronto de src/auth.py. Isso mantém a política de
+# hashing centralizada num único lugar (src/auth.py).
+
+def contar_usuarios() -> int:
+    """Total de contas cadastradas — usado para decidir se o seed inicial já rodou."""
+    with _conectar() as conn:
+        row = conn.execute("SELECT COUNT(*) AS n FROM usuarios").fetchone()
+    return int(row["n"])
+
+
+def criar_usuario(
+    usuario: str,
+    senha_hash: str,
+    nome: str,
+    perfil: str,
+    crm: Optional[str] = None,
+    especialidade: Optional[str] = None,
+    ativo: bool = True,
+) -> None:
+    """
+    Cria uma nova conta. `perfil` deve ser 'admin' ou 'medico'.
+
+    Levanta sqlite3.IntegrityError se `usuario` já existir — o chamador deve
+    tratar esse caso (ex.: exibir "nome de usuário já em uso").
+    """
+    sql = """
+        INSERT INTO usuarios (usuario, senha_hash, nome, perfil, crm, especialidade, ativo)
+        VALUES (?,?,?,?,?,?,?)
+    """
+    with _conectar() as conn:
+        conn.execute(sql, (usuario, senha_hash, nome, perfil, crm, especialidade, int(ativo)))
+        conn.commit()
+
+
+def buscar_usuario_por_login(usuario: str) -> Optional[dict]:
+    """Retorna a conta pelo nome de usuário (para checagem de login), ou None."""
+    sql = "SELECT * FROM usuarios WHERE usuario = ?"
+    with _conectar() as conn:
+        row = conn.execute(sql, (usuario,)).fetchone()
+    return dict(row) if row else None
+
+
+def buscar_usuario_por_id(usuario_id: int) -> Optional[dict]:
+    """Retorna a conta pelo id, ou None."""
+    sql = "SELECT * FROM usuarios WHERE id = ?"
+    with _conectar() as conn:
+        row = conn.execute(sql, (usuario_id,)).fetchone()
+    return dict(row) if row else None
+
+
+def listar_medicos() -> list[dict]:
+    """Retorna todas as contas de médico cadastradas, ordenadas por nome."""
+    sql = "SELECT * FROM usuarios WHERE perfil = 'medico' ORDER BY nome"
+    with _conectar() as conn:
+        rows = conn.execute(sql).fetchall()
+    return [dict(r) for r in rows]
+
+
+def definir_status_usuario(usuario_id: int, ativo: bool) -> bool:
+    """Ativa ou desativa uma conta. Retorna True se algum registro foi alterado."""
+    sql = "UPDATE usuarios SET ativo = ? WHERE id = ?"
+    with _conectar() as conn:
+        cursor = conn.execute(sql, (int(ativo), usuario_id))
+        conn.commit()
+        return cursor.rowcount > 0
+
+
+def redefinir_senha_usuario(usuario_id: int, novo_senha_hash: str) -> bool:
+    """Substitui o hash de senha de uma conta. Retorna True se alterou algum registro."""
+    sql = "UPDATE usuarios SET senha_hash = ? WHERE id = ?"
+    with _conectar() as conn:
+        cursor = conn.execute(sql, (novo_senha_hash, usuario_id))
+        conn.commit()
+        return cursor.rowcount > 0
 
 
 def salvar_atestado(

@@ -17,17 +17,23 @@ import html
 import io
 import os
 import secrets
+import sqlite3
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
 import streamlit as st
 import streamlit.components.v1 as components
 
-from src.auth import MEDICOS_TESTE, autenticar
+from src.auth import ADMIN_INICIAL, MEDICOS_TESTE, autenticar, gerar_hash_senha, semear_usuarios_iniciais
 from src.database import (
     buscar_atestado_por_codigo,
+    buscar_usuario_por_login,
+    criar_usuario,
+    definir_status_usuario,
     init_db,
     listar_atestados_por_crm,
+    listar_medicos,
+    redefinir_senha_usuario,
     revogar_atestado,
     salvar_atestado,
 )
@@ -61,6 +67,7 @@ st.set_page_config(
 # Inicialização do banco (idempotente)
 # ---------------------------------------------------------------------------
 init_db()
+semear_usuarios_iniciais()
 
 
 # ---------------------------------------------------------------------------
@@ -550,8 +557,12 @@ def tela_login() -> None:
                 unsafe_allow_html=True,
             )
 
-            with st.expander("🔑 Credenciais de teste (clique para ver)", expanded=True):
-                st.markdown("**Contas disponíveis para teste:**")
+            with st.expander("🔑 Credenciais iniciais — protótipo (clique para ver)", expanded=True):
+                st.markdown(
+                    f"**Administrador inicial** — usuário: `{ADMIN_INICIAL['usuario']}` / "
+                    f"senha: `{ADMIN_INICIAL['senha']}` — use para criar e gerenciar contas de médico."
+                )
+                st.markdown("**Contas de médico para teste:**")
                 colunas = st.columns(len(MEDICOS_TESTE))
                 for col, m in zip(colunas, MEDICOS_TESTE):
                     with col:
@@ -561,6 +572,10 @@ def tela_login() -> None:
                             f"Senha: `{m['senha']}`  \n"
                             f"CRM: {m['crm']}"
                         )
+                st.caption(
+                    "As senhas acima só existem em texto puro nesta nota — no banco de dados "
+                    "elas ficam sempre protegidas por hash."
+                )
 
             with st.form("form_login"):
                 usuario = st.text_input("Usuário", placeholder="ex.: drsilva")
@@ -573,22 +588,188 @@ def tela_login() -> None:
                 if not usuario or not senha:
                     st.warning("Preencha usuário e senha.")
                 else:
-                    medico = autenticar(usuario.strip(), senha)
-                    if medico:
-                        st.session_state["medico"] = medico
+                    conta = autenticar(usuario.strip(), senha)
+                    if conta:
+                        st.session_state["usuario"] = conta
                         st.rerun()
                     else:
-                        st.error("Usuário ou senha inválidos. Verifique as credenciais de teste acima.")
+                        st.error(
+                            "Usuário ou senha inválidos, ou conta desativada. "
+                            "Verifique as credenciais iniciais acima."
+                        )
 
     _rodape()
 
 
 # ---------------------------------------------------------------------------
-# TELA 3 — Dashboard do médico
+# TELA 3 — Painel do administrador
+# ---------------------------------------------------------------------------
+
+def tela_admin() -> None:
+    admin = st.session_state["usuario"]
+
+    # Fail-closed: mesmo que o roteador já tenha checado o perfil antes de
+    # chamar esta função, uma segunda checagem aqui garante que uma sessão
+    # inconsistente/adulterada nunca renderize o painel de administrador.
+    if admin.get("perfil") != "admin":
+        st.session_state.pop("usuario", None)
+        st.error("Sessão inválida. Faça login novamente.")
+        st.stop()
+
+    conteudo_direita = (
+        f'<div style="font-size:1.2rem; font-weight:700;">{html.escape(admin["nome"])}</div>'
+        f'<div style="font-size:0.88rem; opacity:0.92;">Administrador</div>'
+    )
+    _barra_cabecalho(conteudo_direita)
+
+    col_espaco, col_sair = st.columns([5, 1])
+    with col_sair:
+        if st.button("Sair", use_container_width=True, type="secondary", key="sair_admin"):
+            del st.session_state["usuario"]
+            st.rerun()
+
+    st.markdown(f'<h3 style="color:{COR_PRIMARIA}; margin-top:0;">👩‍⚕️ Cadastrar médico</h3>', unsafe_allow_html=True)
+
+    with st.form("form_criar_medico", clear_on_submit=True):
+        col_a, col_b = st.columns(2)
+        with col_a:
+            nome_medico = st.text_input("Nome completo *", placeholder="ex.: Dra. Maria Souza")
+            usuario_medico = st.text_input("Usuário de acesso *", placeholder="ex.: dramaria")
+        with col_b:
+            crm_medico = st.text_input("CRM (com UF) *", placeholder="ex.: CRM-SP 111222")
+            especialidade_medico = st.text_input("Especialidade", placeholder="ex.: Clínica Geral")
+        senha_inicial = st.text_input(
+            "Senha inicial *",
+            type="password",
+            help="O médico poderá usar essa senha no primeiro acesso. A senha é guardada com hash, nunca em texto puro.",
+        )
+        criar = st.form_submit_button("➕ Criar conta de médico", use_container_width=True, type="primary")
+
+    if criar:
+        erros = []
+        if not nome_medico.strip():
+            erros.append("Informe o nome completo do médico.")
+        if not crm_medico.strip():
+            erros.append("Informe o CRM (com UF).")
+        if not usuario_medico.strip():
+            erros.append("Informe um usuário de acesso.")
+        if not senha_inicial or len(senha_inicial) < 6:
+            erros.append("A senha inicial deve ter pelo menos 6 caracteres.")
+
+        if erros:
+            for e in erros:
+                st.error(e)
+        else:
+            try:
+                criar_usuario(
+                    usuario=usuario_medico.strip(),
+                    senha_hash=gerar_hash_senha(senha_inicial),
+                    nome=nome_medico.strip(),
+                    perfil="medico",
+                    crm=crm_medico.strip(),
+                    especialidade=especialidade_medico.strip() or None,
+                )
+                st.success(f"✅ Conta criada para {nome_medico.strip()}.")
+                st.rerun()
+            except sqlite3.IntegrityError:
+                st.error("Esse nome de usuário já está em uso. Escolha outro.")
+
+    st.write("")
+    st.divider()
+
+    st.markdown(f'<h3 style="color:{COR_PRIMARIA};">📋 Médicos cadastrados</h3>', unsafe_allow_html=True)
+
+    medicos = listar_medicos()
+    if not medicos:
+        st.info("Nenhum médico cadastrado ainda.")
+    else:
+        for m in medicos:
+            chave_reset = f"reset_senha_{m['id']}"
+            with st.container(border=True):
+                col_info, col_status, col_acoes = st.columns([3, 1.2, 2])
+                with col_info:
+                    st.markdown(
+                        f'<span style="font-size:1.05rem; font-weight:700; color:{COR_TEXTO};">'
+                        f'{html.escape(m["nome"])}</span><br>'
+                        f'<span style="color:{COR_TEXTO}; opacity:0.75; font-size:0.85rem;">'
+                        f'{html.escape(m["crm"] or "")} · usuário: {html.escape(m["usuario"])}</span>',
+                        unsafe_allow_html=True,
+                    )
+                with col_status:
+                    if m["ativo"]:
+                        st.markdown(
+                            f'<span style="background:{COR_FUNDO_CLARO}; color:{COR_PRIMARIA}; '
+                            f'padding:0.2rem 0.6rem; border-radius:20px; font-size:0.78rem; font-weight:700;">● Ativo</span>',
+                            unsafe_allow_html=True,
+                        )
+                    else:
+                        st.markdown(
+                            f'<span style="background:#FBEAEA; color:{COR_SECUNDARIA}; '
+                            f'padding:0.2rem 0.6rem; border-radius:20px; font-size:0.78rem; font-weight:700;">● Inativo</span>',
+                            unsafe_allow_html=True,
+                        )
+                with col_acoes:
+                    col_toggle, col_reset = st.columns(2)
+                    with col_toggle:
+                        rotulo = "Desativar" if m["ativo"] else "Ativar"
+                        if st.button(rotulo, key=f"toggle_{m['id']}", use_container_width=True, type="secondary"):
+                            definir_status_usuario(m["id"], not m["ativo"])
+                            st.rerun()
+                    with col_reset:
+                        if st.button("Redefinir senha", key=f"btn_{chave_reset}", use_container_width=True, type="secondary"):
+                            st.session_state[chave_reset] = True
+                            st.rerun()
+
+                if st.session_state.get(chave_reset):
+                    with st.form(f"form_{chave_reset}"):
+                        nova_senha = st.text_input(
+                            f"Nova senha para {m['nome']}",
+                            type="password",
+                            key=f"nova_senha_{m['id']}",
+                        )
+                        col_conf, col_canc = st.columns(2)
+                        with col_conf:
+                            confirmar = st.form_submit_button("Confirmar", use_container_width=True, type="primary")
+                        with col_canc:
+                            cancelar = st.form_submit_button("Cancelar", use_container_width=True, type="secondary")
+                    if confirmar:
+                        if not nova_senha or len(nova_senha) < 6:
+                            st.error("A nova senha deve ter pelo menos 6 caracteres.")
+                        else:
+                            redefinir_senha_usuario(m["id"], gerar_hash_senha(nova_senha))
+                            st.session_state.pop(chave_reset, None)
+                            st.success("✅ Senha redefinida com sucesso.")
+                            st.rerun()
+                    if cancelar:
+                        st.session_state.pop(chave_reset, None)
+                        st.rerun()
+
+    _rodape()
+
+
+# ---------------------------------------------------------------------------
+# TELA 4 — Dashboard do médico
 # ---------------------------------------------------------------------------
 
 def tela_dashboard() -> None:
-    medico = st.session_state["medico"]
+    medico = st.session_state["usuario"]
+
+    # Fail-closed: mesmo que o roteador já tenha checado o perfil antes de
+    # chamar esta função, uma segunda checagem aqui garante que uma sessão
+    # inconsistente/adulterada nunca renderize o dashboard do médico.
+    if medico.get("perfil") != "medico":
+        st.session_state.pop("usuario", None)
+        st.error("Sessão inválida. Faça login novamente.")
+        st.stop()
+
+    # Reconsulta a conta no banco para pegar mudanças feitas pelo administrador
+    # nesta mesma sessão (ex.: desativação) — impede que um médico desativado
+    # continue emitindo atestados enquanto a aba do navegador segue aberta.
+    conta_atual = buscar_usuario_por_login(medico["usuario"])
+    if not conta_atual or not conta_atual["ativo"]:
+        del st.session_state["usuario"]
+        st.error("Sua conta foi desativada. Procure o administrador do sistema.")
+        st.stop()
 
     conteudo_direita = (
         f'<div style="font-size:1.2rem; font-weight:700;">{medico["nome"]}</div>'
@@ -599,7 +780,7 @@ def tela_dashboard() -> None:
     col_espaco, col_sair = st.columns([5, 1])
     with col_sair:
         if st.button("Sair", use_container_width=True, type="secondary"):
-            del st.session_state["medico"]
+            del st.session_state["usuario"]
             st.rerun()
 
     erro_revogacao = st.session_state.pop("erro_revogacao", None)
@@ -950,7 +1131,9 @@ codigo_url = st.query_params.get("codigo")
 
 if codigo_url:
     tela_verificacao(str(codigo_url))
-elif "medico" not in st.session_state:
+elif "usuario" not in st.session_state:
     tela_login()
+elif st.session_state["usuario"]["perfil"] == "admin":
+    tela_admin()
 else:
     tela_dashboard()

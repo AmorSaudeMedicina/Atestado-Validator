@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "Add your description here"
 requires-python = ">=3.11"
 dependencies = [
+    "bcrypt>=5.0.0",
     "opencv-python-headless>=5.0.0.93",
     "pillow>=12.3.0",
     "pytesseract>=0.3.13",

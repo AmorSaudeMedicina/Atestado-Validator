@@ -1,0 +1,1 @@
+- [Streamlit auth: bcrypt + idempotent seed](streamlit-bcrypt-auth-seed.md) — password hashing edge cases and safe first-run seeding pattern for a users table.
