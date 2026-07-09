@@ -31,6 +31,10 @@ from src.urls import url_qr_publica, url_verificacao
 _FORMATO_DATA = "%Y-%m-%d"
 
 
+class ErroValidacaoAtestado(ValueError):
+    """Erro de validação dos dados de um atestado (mensagem já em português, pronta para exibir)."""
+
+
 def _erro(status: int, mensagem: str) -> JSONResponse:
     return JSONResponse({"erro": mensagem}, status_code=status)
 
@@ -63,32 +67,23 @@ def _parse_data(valor: str, campo: str) -> date:
         raise ValueError(f"Campo '{campo}' deve estar no formato AAAA-MM-DD.")
 
 
-async def registrar_atestado(request: Request) -> Response:
+def registrar_atestado_core(medico: dict, corpo: dict) -> dict:
     """
-    POST /api/atestados
+    Lógica central de registro de um atestado, compartilhada por TODOS os
+    caminhos de entrada (API REST em `registrar_atestado` abaixo e o
+    conector MCP em `src/mcp_server.py`) — garante que um atestado criado
+    por qualquer um desses caminhos é gravado exatamente da mesma forma:
+    mesmo `codigo`, aparece no dashboard do médico e pode ser revogado
+    normalmente pelo fluxo já existente.
 
-    Cabeçalho: Authorization: Bearer <token do médico>
+    `medico` já deve estar autenticado pelo chamador (dono do token).
+    `corpo` é um dict com os mesmos campos aceitos pelo endpoint REST.
 
-    Corpo JSON:
-        nome_paciente (str, obrigatório)
-        cid (str, obrigatório)
-        data_emissao (str "AAAA-MM-DD", obrigatório)
-        dias_afastamento (int) — OU — data_inicio + data_fim (str "AAAA-MM-DD")
-
-    Resposta 201 JSON:
-        codigo, url_verificacao, qr_code_url, nome_medico, crm
+    Levanta ErroValidacaoAtestado (mensagem em português) se os dados forem
+    inválidos. Não grava nada no banco nesse caso.
     """
-    medico, erro_auth = _autenticar_medico(request)
-    if erro_auth is not None:
-        return erro_auth
-
-    try:
-        corpo = await request.json()
-    except json.JSONDecodeError:
-        return _erro(400, "Corpo da requisição deve ser um JSON válido.")
-
     if not isinstance(corpo, dict):
-        return _erro(400, "Corpo da requisição deve ser um objeto JSON.")
+        raise ErroValidacaoAtestado("Os dados do atestado devem ser um objeto/dicionário.")
 
     nome_paciente = str(corpo.get("nome_paciente") or "").strip()
     cid = str(corpo.get("cid") or "").strip()
@@ -149,41 +144,72 @@ async def registrar_atestado(request: Request) -> Response:
         )
 
     if erros:
-        return _erro(422, "; ".join(erros))
+        raise ErroValidacaoAtestado("; ".join(erros))
 
     codigo = _secrets.token_urlsafe(32)
 
+    salvar_atestado(
+        codigo=codigo,
+        nome_medico=medico["nome"],
+        crm=medico["crm"],
+        nome_paciente=nome_paciente,
+        cid=cid.upper(),
+        data_emissao=data_emissao_str or str(date.today()),
+        data_inicio=data_inicio_str,
+        data_fim=data_fim_str,
+        dias_afastamento=dias_afastamento,
+    )
+
+    return {
+        "codigo": codigo,
+        "url_verificacao": url_verificacao(codigo),
+        "qr_code_url": url_qr_publica(codigo),
+        "nome_medico": medico["nome"],
+        "crm": medico["crm"],
+        "nome_paciente": nome_paciente,
+        "cid": cid.upper(),
+        "data_emissao": data_emissao_str,
+        "data_inicio": data_inicio_str,
+        "data_fim": data_fim_str,
+        "dias_afastamento": dias_afastamento,
+    }
+
+
+async def registrar_atestado(request: Request) -> Response:
+    """
+    POST /api/atestados
+
+    Cabeçalho: Authorization: Bearer <token do médico>
+
+    Corpo JSON:
+        nome_paciente (str, obrigatório)
+        cid (str, obrigatório)
+        data_emissao (str "AAAA-MM-DD", obrigatório)
+        dias_afastamento (int) — OU — data_inicio + data_fim (str "AAAA-MM-DD")
+
+    Resposta 201 JSON:
+        codigo, url_verificacao, qr_code_url, nome_medico, crm
+    """
+    medico, erro_auth = _autenticar_medico(request)
+    if erro_auth is not None:
+        return erro_auth
+
     try:
-        salvar_atestado(
-            codigo=codigo,
-            nome_medico=medico["nome"],
-            crm=medico["crm"],
-            nome_paciente=nome_paciente,
-            cid=cid.upper(),
-            data_emissao=data_emissao_str or str(date.today()),
-            data_inicio=data_inicio_str,
-            data_fim=data_fim_str,
-            dias_afastamento=dias_afastamento,
-        )
+        corpo = await request.json()
+    except json.JSONDecodeError:
+        return _erro(400, "Corpo da requisição deve ser um JSON válido.")
+
+    if not isinstance(corpo, dict):
+        return _erro(400, "Corpo da requisição deve ser um objeto JSON.")
+
+    try:
+        resultado = registrar_atestado_core(medico, corpo)
+    except ErroValidacaoAtestado as exc:
+        return _erro(422, str(exc))
     except Exception:
         return _erro(500, "Erro interno ao salvar o atestado. Tente novamente.")
 
-    return JSONResponse(
-        {
-            "codigo": codigo,
-            "url_verificacao": url_verificacao(codigo),
-            "qr_code_url": url_qr_publica(codigo),
-            "nome_medico": medico["nome"],
-            "crm": medico["crm"],
-            "nome_paciente": nome_paciente,
-            "cid": cid.upper(),
-            "data_emissao": data_emissao_str,
-            "data_inicio": data_inicio_str,
-            "data_fim": data_fim_str,
-            "dias_afastamento": dias_afastamento,
-        },
-        status_code=201,
-    )
+    return JSONResponse(resultado, status_code=201)
 
 
 async def obter_qr_code(request: Request) -> Response:

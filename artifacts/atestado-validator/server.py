@@ -11,7 +11,9 @@ As configurações de servidor (porta interna, CORS, XSRF, tema) continuam
 vindo de .streamlit/config.toml, como antes.
 """
 
+import logging
 import os
+import re
 from pathlib import Path
 
 import uvicorn
@@ -19,6 +21,31 @@ from starlette.routing import Route
 from streamlit.web.server.starlette import App
 
 from src.api import obter_qr_code, registrar_atestado
+from src.mcp_server import mcp_endpoint
+
+_PADRAO_TOKEN_NA_URL = re.compile(r"(/mcp/)[^\s\"?/]+")
+
+
+class _RedigirTokenNosLogsDeAcesso(logging.Filter):
+    """
+    O token de API do médico fica embutido na própria URL do conector MCP
+    (/mcp/{token}), então cada chamada aparece inteira no log de acesso do
+    uvicorn. Este filtro substitui o token por "***" antes de logar, para não
+    deixar a credencial gravada em texto puro nos logs do servidor.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if isinstance(record.args, tuple):
+            record.args = tuple(
+                _PADRAO_TOKEN_NA_URL.sub(r"\1***", arg) if isinstance(arg, str) else arg
+                for arg in record.args
+            )
+        elif isinstance(record.msg, str):
+            record.msg = _PADRAO_TOKEN_NA_URL.sub(r"\1***", record.msg)
+        return True
+
+
+logging.getLogger("uvicorn.access").addFilter(_RedigirTokenNosLogsDeAcesso())
 
 _SCRIPT_PATH = str(Path(__file__).resolve().parent / "app.py")
 
@@ -27,6 +54,7 @@ app = App(
     routes=[
         Route("/api/atestados", registrar_atestado, methods=["POST"]),
         Route("/api/atestados/{codigo}/qrcode.png", obter_qr_code, methods=["GET"]),
+        Route("/mcp/{token}", mcp_endpoint, methods=["GET", "POST"]),
     ],
 )
 

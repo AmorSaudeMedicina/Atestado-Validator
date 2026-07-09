@@ -538,6 +538,41 @@ API recusa o registro (nada é salvo) e devolve um erro claro.
 **Importante:** o token é uma credencial sensível — não compartilhe, não cole em
 lugares públicos, e gere um novo (o que invalida o anterior) se desconfiar que
 vazou.
+
+---
+
+### 🤖 Conectar diretamente na Claude (conversa faz o registro por você)
+
+Além da API acima (para sistemas/automações), também é possível deixar a
+própria Claude registrar atestados durante uma conversa, sem nenhum código —
+usando um **conector MCP**. Depois de conectado, basta pedir à Claude algo como
+*"registre um atestado para [paciente], CID [código], hoje, 3 dias de
+afastamento"* e ela chama a ferramenta e devolve o código, o link de
+verificação e o QR Code.
+
+**Endereço do conector** (troque `SEU_TOKEN_AQUI` pelo seu token, gerado na
+seção "🔑 Token de API" acima):
+
+```
+{endereco_registro.rsplit("/api/atestados", 1)[0]}/mcp/SEU_TOKEN_AQUI
+```
+
+**Passo a passo para conectar na Claude:**
+1. Gere (ou copie) o seu token de API na seção "🔑 Token de API" acima.
+2. Na Claude, abra **Configurações → Conectores** (em claude.ai) e escolha
+   **"Adicionar conector personalizado"** (Custom Connector).
+3. Cole o endereço acima no campo de URL, substituindo `SEU_TOKEN_AQUI` pelo
+   seu token — a própria URL já identifica você como médico, não é preciso
+   preencher nenhum campo de senha/token separado.
+4. Confirme a adição. A Claude vai listar automaticamente a ferramenta
+   "registrar_atestado" disponível nesse conector.
+5. Numa conversa, ative o conector e peça à Claude para registrar o atestado
+   com os dados do paciente — ela chama a ferramenta e mostra o resultado.
+
+Um atestado criado pela Claude por esse caminho é idêntico a um emitido pelo
+formulário ou pela API: aparece no seu dashboard e pode ser revogado
+normalmente. Como o conector usa o mesmo token da API, revogar o token acima
+desativa o conector MCP imediatamente também.
             """
         )
 
