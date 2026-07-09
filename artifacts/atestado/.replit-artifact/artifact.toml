@@ -11,7 +11,7 @@ paths = [ "/" ]
 localPort = 18373
 
 [services.development]
-run = "streamlit run ../atestado-validator/app.py --server.port $PORT --server.address 0.0.0.0 --server.headless true --server.enableCORS false --server.enableXsrfProtection false"
+run = "python ../atestado-validator/server.py"
 
 [services.env]
 PORT = "18373"

@@ -35,9 +35,13 @@ from src.database import (
     listar_medicos,
     redefinir_senha_usuario,
     revogar_atestado,
+    revogar_token_api,
     salvar_atestado,
+    salvar_token_api,
 )
 from src.qr_generator import gerar_qr
+from src.urls import url_base as _url_base_compartilhada, url_qr_publica
+from src.api_tokens import gerar_token, hash_token, mascarar_token
 
 # ---------------------------------------------------------------------------
 # Paleta oficial AmorSaúde
@@ -408,6 +412,136 @@ def _botao_copiar_link(url: str, chave: str) -> None:
     components.html(html_conteudo, height=42)
 
 
+def _secao_token_api(usuario_alvo: dict, quem_gerencia: str) -> None:
+    """
+    Bloco de gestão do token de API de um médico — usado tanto no painel do
+    administrador (gerenciando o token de outro médico) quanto no dashboard
+    do próprio médico (gerenciando o seu). `quem_gerencia` é só um prefixo
+    para as chaves dos widgets, para não colidir quando a mesma função é
+    chamada várias vezes na mesma tela (ex.: um card por médico no admin).
+    """
+    chave_gerar = f"gerar_token_{quem_gerencia}_{usuario_alvo['id']}"
+    chave_confirmar_revogar = f"confirmar_revogar_token_{quem_gerencia}_{usuario_alvo['id']}"
+    chave_token_novo = f"token_novo_{quem_gerencia}_{usuario_alvo['id']}"
+
+    tem_token = bool(usuario_alvo.get("api_token_hash"))
+    token_recem_gerado = st.session_state.get(chave_token_novo)
+
+    with st.expander(f"🔑 Token de API — {usuario_alvo['nome']}", expanded=bool(token_recem_gerado)):
+        st.markdown(
+            "O token de API identifica este médico perante o endpoint de registro "
+            "automático de atestados (ver seção **API / Integrações**). Trate-o como "
+            "uma senha: qualquer chamada feita com ele é registrada em nome deste médico."
+        )
+
+        if token_recem_gerado:
+            st.warning(
+                "⚠️ Copie o token agora — por segurança, ele não será exibido novamente. "
+                "Ao gerar um novo token, este deixa de funcionar.",
+                icon="⚠️",
+            )
+            st.code(token_recem_gerado, language=None)
+            if st.button("Já copiei, ocultar", key=f"ocultar_{chave_token_novo}", type="secondary"):
+                st.session_state.pop(chave_token_novo, None)
+                st.rerun()
+        elif tem_token:
+            st.markdown(
+                f"**Status:** ativo · terminando em `{html.escape(usuario_alvo.get('api_token_ultimos4') or '')}` · "
+                f"gerado em {html.escape(str(usuario_alvo.get('api_token_criado_em') or ''))}"
+            )
+        else:
+            st.caption("Nenhum token de API gerado ainda para este médico.")
+
+        if not token_recem_gerado:
+            col_gerar, col_revogar = st.columns(2)
+            with col_gerar:
+                rotulo = "🔄 Gerar novo token" if tem_token else "➕ Gerar token de API"
+                if st.button(rotulo, key=chave_gerar, use_container_width=True, type="primary"):
+                    novo_token = gerar_token()
+                    salvar_token_api(usuario_alvo["id"], hash_token(novo_token), novo_token[-4:])
+                    st.session_state[chave_token_novo] = novo_token
+                    st.rerun()
+            with col_revogar:
+                if tem_token:
+                    if st.button("🚫 Revogar token", key=f"revogar_btn_{chave_confirmar_revogar}", use_container_width=True, type="secondary"):
+                        st.session_state[chave_confirmar_revogar] = True
+                        st.rerun()
+
+        if st.session_state.get(chave_confirmar_revogar):
+            st.warning("Tem certeza que deseja revogar este token? Chamadas de API feitas com ele passam a ser recusadas imediatamente.", icon="⚠️")
+            col_sim, col_nao = st.columns(2)
+            with col_sim:
+                if st.button("Sim, revogar", key=f"sim_{chave_confirmar_revogar}", use_container_width=True, type="primary"):
+                    revogar_token_api(usuario_alvo["id"])
+                    st.session_state.pop(chave_confirmar_revogar, None)
+                    st.success("Token revogado.")
+                    st.rerun()
+            with col_nao:
+                if st.button("Cancelar", key=f"nao_{chave_confirmar_revogar}", use_container_width=True, type="secondary"):
+                    st.session_state.pop(chave_confirmar_revogar, None)
+                    st.rerun()
+
+
+def _secao_api_integracoes() -> None:
+    """Explicação em português simples de como usar a API de registro programático."""
+    with st.expander("🔌 API / Integrações"):
+        endereco_registro = f"{_url_base()}api/atestados"
+        endereco_qr = f"{_url_base()}api/atestados/{{codigo}}/qrcode.png"
+        st.markdown(
+            f"""
+Além do formulário acima, é possível registrar atestados **automaticamente**, de um
+sistema externo (por exemplo, uma automação que preenche uma "ficha padrão" e
+gera um documento no Canva). Isso é feito chamando um endereço da API com o
+**token de API do médico** (gere um na seção "🔑 Token de API" acima).
+
+**1. Endereço para registrar um atestado**
+
+```
+POST {endereco_registro}
+Authorization: Bearer SEU_TOKEN_AQUI
+Content-Type: application/json
+```
+
+**2. Dados a enviar** (formato JSON):
+- `nome_paciente` — nome completo do paciente
+- `cid` — código CID
+- `data_emissao` — data no formato `AAAA-MM-DD`
+- período de afastamento: **ou** `dias_afastamento` (número de dias) **ou** `data_inicio` + `data_fim` (formato `AAAA-MM-DD`)
+
+Exemplo de corpo da requisição:
+```json
+{{
+  "nome_paciente": "João da Silva",
+  "cid": "J18.9",
+  "data_emissao": "2026-07-09",
+  "dias_afastamento": 3
+}}
+```
+
+**3. O que a API devolve**, se o token for válido: o código único do atestado,
+o link público de verificação e o link público da imagem do QR Code (pronto
+para ser baixado por outro sistema, como o Canva):
+```json
+{{
+  "codigo": "abc123...",
+  "url_verificacao": "https://.../?codigo=abc123...",
+  "qr_code_url": "{endereco_qr}"
+}}
+```
+
+O atestado criado dessa forma é idêntico a um emitido pelo formulário: aparece
+no dashboard do médico dono do token e pode ser revogado normalmente.
+
+**4. Se o token for inválido, ausente ou pertencer a um médico desativado**, a
+API recusa o registro (nada é salvo) e devolve um erro claro.
+
+**Importante:** o token é uma credencial sensível — não compartilhe, não cole em
+lugares públicos, e gere um novo (o que invalida o anterior) se desconfiar que
+vazou.
+            """
+        )
+
+
 _injetar_estilo()
 
 # ---------------------------------------------------------------------------
@@ -415,12 +549,8 @@ _injetar_estilo()
 # ---------------------------------------------------------------------------
 
 def _url_base() -> str:
-    """Monta a URL base do app a partir da variável de ambiente do Replit."""
-    dominio = os.environ.get("REPLIT_DEV_DOMAIN", "")
-    if dominio:
-        return f"https://{dominio}/"
-    # Fallback para ambiente local
-    return "http://localhost:5000/"
+    """Monta a URL base do app (implementação compartilhada com a API em src/urls.py)."""
+    return _url_base_compartilhada()
 
 
 def _formatar_periodo(row: dict) -> str:
@@ -743,6 +873,12 @@ def tela_admin() -> None:
                     if cancelar:
                         st.session_state.pop(chave_reset, None)
                         st.rerun()
+
+                _secao_token_api(m, quem_gerencia="admin")
+
+    st.write("")
+    st.divider()
+    _secao_api_integracoes()
 
     _rodape()
 
@@ -1119,6 +1255,12 @@ def tela_dashboard() -> None:
                     col_vazia1, col_qr_meio, col_vazia2 = st.columns([1, 1, 1])
                     with col_qr_meio:
                         st.image(qr_mini, caption=f"QR — {a['nome_paciente']}", use_container_width=True)
+
+    st.write("")
+    st.divider()
+    st.markdown(f'<h3 style="color:{COR_PRIMARIA};">🔌 Registro automático (API)</h3>', unsafe_allow_html=True)
+    _secao_token_api(conta_atual, quem_gerencia="medico")
+    _secao_api_integracoes()
 
     _rodape()
 

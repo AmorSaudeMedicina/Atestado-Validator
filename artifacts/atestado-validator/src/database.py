@@ -63,6 +63,17 @@ CREATE TABLE IF NOT EXISTS usuarios (
 )
 """
 
+# Colunas de token de API adicionadas depois da criação inicial da tabela
+# usuarios. Nunca guardamos o token em texto puro — apenas um hash (SHA-256
+# é suficiente aqui porque o token é aleatório de alta entropia, ao
+# contrário de uma senha escolhida por humano) e os 4 últimos caracteres,
+# só para exibição/identificação na interface.
+_MIGRACOES_COLUNAS_USUARIOS = [
+    ("api_token_hash", "TEXT"),
+    ("api_token_ultimos4", "TEXT"),
+    ("api_token_criado_em", "TEXT"),
+]
+
 
 def _conectar() -> sqlite3.Connection:
     """
@@ -95,6 +106,12 @@ def init_db() -> None:
             if nome_coluna not in colunas_existentes:
                 conn.execute(f"ALTER TABLE atestados ADD COLUMN {nome_coluna} {definicao_sql}")
         conn.execute(_CREATE_USUARIOS)
+        colunas_usuarios_existentes = {
+            linha["name"] for linha in conn.execute("PRAGMA table_info(usuarios)")
+        }
+        for nome_coluna, definicao_sql in _MIGRACOES_COLUNAS_USUARIOS:
+            if nome_coluna not in colunas_usuarios_existentes:
+                conn.execute(f"ALTER TABLE usuarios ADD COLUMN {nome_coluna} {definicao_sql}")
         conn.commit()
 
 
@@ -177,6 +194,52 @@ def redefinir_senha_usuario(usuario_id: int, novo_senha_hash: str) -> bool:
         cursor = conn.execute(sql, (novo_senha_hash, usuario_id))
         conn.commit()
         return cursor.rowcount > 0
+
+
+def salvar_token_api(usuario_id: int, token_hash: str, ultimos4: str) -> bool:
+    """
+    Grava o hash do novo token de API de um médico (gerado em src/api_tokens.py),
+    substituindo qualquer token anterior — isso invalida automaticamente o
+    token antigo (regeneração = revogação implícita do anterior).
+    """
+    sql = """
+        UPDATE usuarios
+        SET api_token_hash = ?, api_token_ultimos4 = ?, api_token_criado_em = datetime('now','localtime')
+        WHERE id = ?
+    """
+    with _conectar() as conn:
+        cursor = conn.execute(sql, (token_hash, ultimos4, usuario_id))
+        conn.commit()
+        return cursor.rowcount > 0
+
+
+def revogar_token_api(usuario_id: int) -> bool:
+    """Remove o token de API de um médico (chamadas com o token antigo passam a ser recusadas)."""
+    sql = """
+        UPDATE usuarios
+        SET api_token_hash = NULL, api_token_ultimos4 = NULL, api_token_criado_em = NULL
+        WHERE id = ?
+    """
+    with _conectar() as conn:
+        cursor = conn.execute(sql, (usuario_id,))
+        conn.commit()
+        return cursor.rowcount > 0
+
+
+def buscar_medico_por_token_hash(token_hash: str) -> Optional[dict]:
+    """
+    Resolve um token de API (já convertido em hash pelo chamador) para a conta
+    de médico dona dele. Só retorna a conta se ela for de perfil 'medico' E
+    estiver ativa — isso garante que um token de médico desativado nunca
+    autentica uma chamada, mesmo que o hash ainda esteja salvo no banco.
+    """
+    sql = """
+        SELECT * FROM usuarios
+        WHERE api_token_hash = ? AND perfil = 'medico' AND ativo = 1
+    """
+    with _conectar() as conn:
+        row = conn.execute(sql, (token_hash,)).fetchone()
+    return dict(row) if row else None
 
 
 def salvar_atestado(
