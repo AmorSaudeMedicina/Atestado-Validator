@@ -94,7 +94,7 @@ def _erro_jsonrpc(id_: Any, code: int, mensagem: str) -> dict:
     return {"jsonrpc": "2.0", "id": id_, "error": {"code": code, "message": mensagem}}
 
 
-async def _processar_mensagem(msg: Any, medico: dict) -> dict | None:
+async def _processar_mensagem(msg: Any, medico: dict, request: Request) -> dict | None:
     """
     Processa uma única mensagem JSON-RPC e devolve a resposta (dict) a ser
     serializada, ou None se a mensagem for uma notificação (sem `id`), que
@@ -134,7 +134,7 @@ async def _processar_mensagem(msg: Any, medico: dict) -> dict | None:
                 return None
             return _erro_jsonrpc(id_, -32602, f"Ferramenta desconhecida: '{nome_ferramenta}'.")
         try:
-            dados = registrar_atestado_core(medico, argumentos)
+            dados = registrar_atestado_core(medico, argumentos, request)
             texto = json.dumps(dados, ensure_ascii=False, indent=2)
             resultado = {
                 "content": [
@@ -179,13 +179,13 @@ def _extrair_bearer(request: Request) -> str | None:
     return None
 
 
-def _resposta_nao_autorizada() -> Response:
+def _resposta_nao_autorizada(request: Request) -> Response:
     """
     401 com o cabeçalho WWW-Authenticate que a Claude usa para localizar os
     metadados do recurso protegido e iniciar o fluxo OAuth automaticamente
     (handshake "descubra e autentique" descrito na documentação do MCP/Claude).
     """
-    emissor = url_base().rstrip("/")
+    emissor = url_base(request).rstrip("/")
     return JSONResponse(
         {"erro": "Access token ausente, inválido, expirado ou de médico inativo."},
         status_code=401,
@@ -207,7 +207,7 @@ async def mcp_endpoint(request: Request) -> Response:
     token = _extrair_bearer(request)
     medico = buscar_medico_por_oauth_token_hash(hash_token(token)) if token else None
     if not medico:
-        return _resposta_nao_autorizada()
+        return _resposta_nao_autorizada(request)
 
     if request.method != "POST":
         # O transporte Streamable HTTP permite ao servidor recusar GET quando
@@ -224,14 +224,14 @@ async def mcp_endpoint(request: Request) -> Response:
     if isinstance(corpo, list):
         respostas = []
         for msg in corpo:
-            resposta = await _processar_mensagem(msg, medico)
+            resposta = await _processar_mensagem(msg, medico, request)
             if resposta is not None:
                 respostas.append(resposta)
         if not respostas:
             return Response(status_code=202)
         return JSONResponse(respostas)
 
-    resposta = await _processar_mensagem(corpo, medico)
+    resposta = await _processar_mensagem(corpo, medico, request)
     if resposta is None:
         return Response(status_code=202)
     return JSONResponse(resposta)

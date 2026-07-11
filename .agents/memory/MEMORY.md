@@ -1,3 +1,4 @@
 - [Streamlit auth: bcrypt + idempotent seed](streamlit-bcrypt-auth-seed.md) — password hashing edge cases and safe first-run seeding pattern for a users table.
 - [Embedded API routes in Streamlit](streamlit-embedded-api-routes.md) — add REST endpoints in-process via Streamlit's Starlette App(routes=...), no separate service needed.
 - [MCP connector with token-in-URL](mcp-connector-token-in-url.md) — hand-rolled Streamable HTTP MCP server reusing existing REST token auth; redact token in access logs.
+- [Dynamic public base URL](dynamic-public-base-url.md) — derive public URLs from request host (with allowlist validation) instead of hardcoding dev domain; use `vm` target + `/healthz` for SQLite/session-stateful apps.

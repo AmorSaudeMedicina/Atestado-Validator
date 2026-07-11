@@ -589,6 +589,43 @@ própria Claude abre.
 o conector MCP. Para desconectar todos os acessos já concedidos à Claude (por
 exemplo, se você suspeita que alguém mais teve acesso à sua conta), use o
 botão abaixo.
+
+---
+
+### 🌐 Publicar o app (obrigatório para o conector MCP ficar sempre disponível)
+
+Enquanto o app estiver rodando apenas no **endereço de desenvolvimento**
+(o que aparece durante a edição no Replit), ele fica no ar apenas enquanto o
+workspace está aberto — é por isso que a Claude pode mostrar **"Não foi
+possível conectar ao servidor"** ao tentar usar o conector depois de um
+tempo. Para o conector (e a página pública de verificação) ficarem
+disponíveis o tempo todo, é preciso **publicar** o app.
+
+**Passo a passo para publicar:**
+1. No topo do workspace do Replit, clique em **"Publish"** (ou no menu de
+   três pontos, se não aparecer direto).
+2. Escolha o tipo de implantação — este app já está configurado para rodar
+   como um serviço sempre ativo ("Reserved VM"), que é o que ele precisa,
+   porque mantém os dados salvos localmente e não pode rodar em múltiplas
+   cópias ao mesmo tempo.
+3. Confirme e aguarde a publicação terminar. Você vai receber um endereço
+   fixo, algo como `https://SEU-APP.replit.app` (ou um domínio próprio, se
+   você configurou um).
+4. **Depois de publicado, o endereço do conector MCP passa a ser:**
+   ```
+   https://SEU-APP.replit.app/mcp
+   ```
+   (troque pelo endereço real que o Replit gerar para o seu app — toda vez
+   que alguém acessa o app, ele monta os links automaticamente com base no
+   endereço usado na hora, então não é preciso configurar nada manualmente
+   depois de publicar.)
+5. **Se você já tinha conectado o conector usando o endereço de
+   desenvolvimento (o que aparece durante a edição, terminado em
+   `.replit.dev`), remova esse conector em Configurações → Conectores da
+   Claude e adicione-o de novo com o endereço publicado (`.replit.app`)
+   acima.** Um conector apontando para o endereço de desenvolvimento sempre
+   vai falhar assim que o workspace de edição não estiver aberto — mesmo que
+   antes tenha funcionado.
             """
         )
         st.divider()

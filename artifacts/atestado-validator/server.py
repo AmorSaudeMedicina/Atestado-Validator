@@ -17,6 +17,8 @@ import re
 from pathlib import Path
 
 import uvicorn
+from starlette.requests import Request
+from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 from streamlit.web.server.starlette import App
 
@@ -30,6 +32,19 @@ from src.oauth_server import (
     metadados_protected_resource,
     registrar_cliente,
 )
+
+
+async def healthz(request: Request) -> Response:
+    """
+    GET /healthz — usado pelo Replit (e por qualquer monitor externo) para
+    verificar se o processo está de pé e o banco de dados está acessível.
+    Não requer autenticação nem toca em dados de médico/paciente.
+    """
+    try:
+        init_db()
+        return JSONResponse({"status": "ok"})
+    except Exception:
+        return JSONResponse({"status": "erro"}, status_code=503)
 
 # O access token OAuth do conector MCP passou a ser enviado apenas no
 # cabeçalho Authorization (nunca na URL), então não há mais token embutido
@@ -68,6 +83,7 @@ _SCRIPT_PATH = str(Path(__file__).resolve().parent / "app.py")
 app = App(
     _SCRIPT_PATH,
     routes=[
+        Route("/healthz", healthz, methods=["GET"]),
         Route("/api/atestados", registrar_atestado, methods=["POST"]),
         Route("/api/atestados/{codigo}/qrcode.png", obter_qr_code, methods=["GET"]),
         Route("/mcp", mcp_endpoint, methods=["GET", "POST"]),

@@ -49,8 +49,8 @@ from src.urls import url_base
 _DURACAO_ACCESS_TOKEN_DIAS = 180
 
 
-def _emissor() -> str:
-    return url_base().rstrip("/")
+def _emissor(request: Request) -> str:
+    return url_base(request).rstrip("/")
 
 
 def _redirect_uri_valida(uri: str) -> bool:
@@ -84,7 +84,7 @@ def _erro_json(status: int, erro: str, descricao: str = "") -> JSONResponse:
 
 async def metadados_authorization_server(request: Request) -> Response:
     """GET /.well-known/oauth-authorization-server — descoberta do servidor de autorização (RFC 8414)."""
-    emissor = _emissor()
+    emissor = _emissor(request)
     return JSONResponse(
         {
             "issuer": emissor,
@@ -101,7 +101,7 @@ async def metadados_authorization_server(request: Request) -> Response:
 
 async def metadados_protected_resource(request: Request) -> Response:
     """GET /.well-known/oauth-protected-resource[/mcp] — metadados do recurso protegido (RFC 9728)."""
-    emissor = _emissor()
+    emissor = _emissor(request)
     return JSONResponse(
         {
             "resource": f"{emissor}/mcp",

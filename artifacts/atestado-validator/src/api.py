@@ -67,7 +67,7 @@ def _parse_data(valor: str, campo: str) -> date:
         raise ValueError(f"Campo '{campo}' deve estar no formato AAAA-MM-DD.")
 
 
-def registrar_atestado_core(medico: dict, corpo: dict) -> dict:
+def registrar_atestado_core(medico: dict, corpo: dict, request: Request | None = None) -> dict:
     """
     Lógica central de registro de um atestado, compartilhada por TODOS os
     caminhos de entrada (API REST em `registrar_atestado` abaixo e o
@@ -162,8 +162,8 @@ def registrar_atestado_core(medico: dict, corpo: dict) -> dict:
 
     return {
         "codigo": codigo,
-        "url_verificacao": url_verificacao(codigo),
-        "qr_code_url": url_qr_publica(codigo),
+        "url_verificacao": url_verificacao(codigo, request),
+        "qr_code_url": url_qr_publica(codigo, request),
         "nome_medico": medico["nome"],
         "crm": medico["crm"],
         "nome_paciente": nome_paciente,
@@ -203,7 +203,7 @@ async def registrar_atestado(request: Request) -> Response:
         return _erro(400, "Corpo da requisição deve ser um objeto JSON.")
 
     try:
-        resultado = registrar_atestado_core(medico, corpo)
+        resultado = registrar_atestado_core(medico, corpo, request)
     except ErroValidacaoAtestado as exc:
         return _erro(422, str(exc))
     except Exception:
@@ -227,7 +227,7 @@ async def obter_qr_code(request: Request) -> Response:
     if not atestado:
         return _erro(404, "Atestado não encontrado.")
 
-    qr_bytes = gerar_qr(url_verificacao(codigo))
+    qr_bytes = gerar_qr(url_verificacao(codigo, request))
     return Response(
         content=qr_bytes,
         media_type="image/png",

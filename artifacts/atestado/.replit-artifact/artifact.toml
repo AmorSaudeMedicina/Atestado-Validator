@@ -4,6 +4,7 @@ title = "Validador de Atestados"
 version = "1.0.0"
 id = "artifacts/atestado"
 router = "path"
+deploymentTarget = "vm"
 
 [[services]]
 name = "web"
@@ -16,3 +17,9 @@ run = "python ../atestado-validator/server.py"
 [services.env]
 PORT = "18373"
 BASE_PATH = "/"
+
+[services.production]
+run = "python ../atestado-validator/server.py"
+
+[services.production.health.startup]
+path = "/healthz"
