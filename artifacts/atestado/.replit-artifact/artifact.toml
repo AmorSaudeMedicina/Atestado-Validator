@@ -19,7 +19,7 @@ PORT = "18373"
 BASE_PATH = "/"
 
 [services.production]
-run = "python ../atestado-validator/server.py"
+run = "python artifacts/atestado-validator/server.py"
 
 [services.production.health.startup]
 path = "/healthz"
