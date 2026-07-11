@@ -14,14 +14,16 @@ não usa streaming (SSE) nem sessões — cada requisição POST é respondida c
 um único JSON, o que é uma forma válida do transporte para servidores que não
 precisam enviar mensagens assíncronas ao cliente.
 
-Autenticação: o token de API do médico (o MESMO token usado na API REST) fica
-embutido na própria URL do conector (`/mcp/{token}`), pois a maioria dos
-clientes MCP remotos (incluindo a Claude) não oferece um campo simples para
-enviar um cabeçalho Bearer fixo por conector — uma URL única por médico é a
-forma mais simples de garantir que cada chamada seja atribuída ao médico
-correto. O token em si continua sendo o mesmo segredo de alta entropia já
-usado pela API REST; revogar o token na tela "Token de API" invalida também
-o conector MCP imediatamente.
+Autenticação: usa o fluxo OAuth 2.0 (Authorization Code + PKCE, com Dynamic
+Client Registration) implementado em `src/oauth_server.py` — o mecanismo que a
+Claude sempre suporta "de fábrica" para conectores remotos. O médico faz
+login (usuário/senha da própria conta) uma única vez, numa tela de
+autorização hospedada por este mesmo app; a Claude recebe em troca um access
+token opaco e passa a enviar `Authorization: Bearer <token>` em toda
+chamada. (Anteriormente o token de API ficava embutido na própria URL do
+conector — `/mcp/{token}` — mas esse esquema não é um mecanismo de
+autenticação que a Claude reconheça, então ela conectava mas nunca chegava a
+listar as ferramentas. Por isso a autenticação foi migrada para OAuth.)
 """
 
 from __future__ import annotations
@@ -34,7 +36,8 @@ from starlette.responses import JSONResponse, Response
 
 from src.api import ErroValidacaoAtestado, registrar_atestado_core
 from src.api_tokens import hash_token
-from src.database import buscar_medico_por_token_hash
+from src.database import buscar_medico_por_oauth_token_hash
+from src.urls import url_base
 
 _PROTOCOLO_PADRAO = "2025-06-18"
 
@@ -169,22 +172,42 @@ async def _processar_mensagem(msg: Any, medico: dict) -> dict | None:
     return _resultado_jsonrpc(id_, resultado)
 
 
+def _extrair_bearer(request: Request) -> str | None:
+    cabecalho = request.headers.get("authorization", "")
+    if cabecalho.lower().startswith("bearer "):
+        return cabecalho[7:].strip() or None
+    return None
+
+
+def _resposta_nao_autorizada() -> Response:
+    """
+    401 com o cabeçalho WWW-Authenticate que a Claude usa para localizar os
+    metadados do recurso protegido e iniciar o fluxo OAuth automaticamente
+    (handshake "descubra e autentique" descrito na documentação do MCP/Claude).
+    """
+    emissor = url_base().rstrip("/")
+    return JSONResponse(
+        {"erro": "Access token ausente, inválido, expirado ou de médico inativo."},
+        status_code=401,
+        headers={
+            "WWW-Authenticate": f'Bearer resource_metadata="{emissor}/.well-known/oauth-protected-resource"'
+        },
+    )
+
+
 async def mcp_endpoint(request: Request) -> Response:
     """
-    POST /mcp/{token} — endpoint único do conector MCP (transporte Streamable HTTP,
+    POST /mcp — endpoint único do conector MCP (transporte Streamable HTTP,
     sem streaming/sessão: cada requisição recebe uma resposta JSON direta).
 
-    O token na URL identifica o médico dono do conector — o mesmo usado na API
-    REST. Token ausente/inválido/de médico inativo é recusado antes de
+    Autenticação via `Authorization: Bearer <access token OAuth>` — token
+    ausente/inválido/expirado/de médico inativo é recusado (401) antes de
     qualquer processamento JSON-RPC, e nenhuma mensagem chega a ser lida.
     """
-    token = request.path_params.get("token", "")
-    medico = buscar_medico_por_token_hash(hash_token(token)) if token else None
+    token = _extrair_bearer(request)
+    medico = buscar_medico_por_oauth_token_hash(hash_token(token)) if token else None
     if not medico:
-        return JSONResponse(
-            {"erro": "Token de API inválido, revogado ou de médico inativo."},
-            status_code=401,
-        )
+        return _resposta_nao_autorizada()
 
     if request.method != "POST":
         # O transporte Streamable HTTP permite ao servidor recusar GET quando

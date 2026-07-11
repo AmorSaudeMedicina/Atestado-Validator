@@ -28,6 +28,7 @@ from src.auth import ADMIN_INICIAL, MEDICOS_TESTE, autenticar, gerar_hash_senha,
 from src.database import (
     buscar_atestado_por_codigo,
     buscar_usuario_por_login,
+    contar_oauth_access_tokens_ativos,
     criar_usuario,
     definir_status_usuario,
     init_db,
@@ -35,6 +36,7 @@ from src.database import (
     listar_medicos,
     redefinir_senha_usuario,
     revogar_atestado,
+    revogar_oauth_access_tokens,
     revogar_token_api,
     salvar_atestado,
     salvar_token_api,
@@ -550,31 +552,57 @@ usando um **conector MCP**. Depois de conectado, basta pedir à Claude algo como
 afastamento"* e ela chama a ferramenta e devolve o código, o link de
 verificação e o QR Code.
 
-**Endereço do conector** (troque `SEU_TOKEN_AQUI` pelo seu token, gerado na
-seção "🔑 Token de API" acima):
+**Endereço do conector** (o mesmo endereço serve para todos os médicos —
+não leva token nenhum, o login é feito depois, na própria Claude):
 
 ```
-{endereco_registro.rsplit("/api/atestados", 1)[0]}/mcp/SEU_TOKEN_AQUI
+{endereco_registro.rsplit("/api/atestados", 1)[0]}/mcp
 ```
 
 **Passo a passo para conectar na Claude:**
-1. Gere (ou copie) o seu token de API na seção "🔑 Token de API" acima.
-2. Na Claude, abra **Configurações → Conectores** (em claude.ai) e escolha
+1. Na Claude, abra **Configurações → Conectores** (em claude.ai) e escolha
    **"Adicionar conector personalizado"** (Custom Connector).
-3. Cole o endereço acima no campo de URL, substituindo `SEU_TOKEN_AQUI` pelo
-   seu token — a própria URL já identifica você como médico, não é preciso
-   preencher nenhum campo de senha/token separado.
-4. Confirme a adição. A Claude vai listar automaticamente a ferramenta
+2. Cole o endereço acima no campo de URL (sem token, sem parâmetros).
+3. Confirme a adição e clique em **"Conectar"** — a Claude vai abrir uma
+   tela de login própria deste app. Entre com o seu **usuário e senha do
+   AmorSaúde** (a mesma conta de médico usada aqui no Portal) e autorize o
+   acesso.
+4. Depois de autorizar, a Claude já lista automaticamente a ferramenta
    "registrar_atestado" disponível nesse conector.
 5. Numa conversa, ative o conector e peça à Claude para registrar o atestado
    com os dados do paciente — ela chama a ferramenta e mostra o resultado.
 
 Um atestado criado pela Claude por esse caminho é idêntico a um emitido pelo
 formulário ou pela API: aparece no seu dashboard e pode ser revogado
-normalmente. Como o conector usa o mesmo token da API, revogar o token acima
-desativa o conector MCP imediatamente também.
+normalmente.
+
+**Se você conectou este conector antes desta atualização:** o endereço antigo
+(que tinha um token colado na própria URL) deixou de funcionar — a Claude
+conectava, mas nunca conseguia listar a ferramenta de registro, porque aquele
+formato não é reconhecido pelo mecanismo de autenticação da Claude. **Remova
+o conector antigo em Configurações → Conectores e adicione-o de novo com o
+endereço acima**, sem token na URL; o login passa a ser feito na tela que a
+própria Claude abre.
+
+**Revogar o acesso do conector Claude:** como a autenticação agora usa login
+(e não mais o token de API), revogar o "🔑 Token de API" acima **não** afeta
+o conector MCP. Para desconectar todos os acessos já concedidos à Claude (por
+exemplo, se você suspeita que alguém mais teve acesso à sua conta), use o
+botão abaixo.
             """
         )
+        st.divider()
+        usuario_atual = st.session_state.get("usuario")
+        if usuario_atual:
+            qtd_ativos = contar_oauth_access_tokens_ativos(usuario_atual["id"])
+            if qtd_ativos:
+                st.caption(f"Conector Claude: {qtd_ativos} acesso(s) autorizado(s) e ainda válido(s).")
+                if st.button("🚫 Revogar acesso do conector Claude", key="revogar_oauth_mcp"):
+                    revogar_oauth_access_tokens(usuario_atual["id"])
+                    st.success("Acesso revogado. Para usar a Claude novamente, será preciso autorizar o conector outra vez.")
+                    st.rerun()
+            else:
+                st.caption("Conector Claude: nenhum acesso autorizado no momento.")
 
 
 _injetar_estilo()

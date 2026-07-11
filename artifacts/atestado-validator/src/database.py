@@ -74,6 +74,47 @@ _MIGRACOES_COLUNAS_USUARIOS = [
     ("api_token_criado_em", "TEXT"),
 ]
 
+# ---------------------------------------------------------------------------
+# OAuth 2.0 (Dynamic Client Registration + Authorization Code + PKCE) — usado
+# apenas pelo conector MCP, para que a Claude descubra e autentique via o
+# fluxo de autorização previsto pelo próprio protocolo MCP, em vez do token
+# de API embutido na URL. Nenhuma senha é guardada aqui: apenas hash do
+# access token, igual ao padrão já usado para o token de API (api_tokens.py).
+# ---------------------------------------------------------------------------
+
+_CREATE_OAUTH_CLIENTS = """
+CREATE TABLE IF NOT EXISTS oauth_clients (
+    client_id     TEXT PRIMARY KEY,
+    client_name   TEXT,
+    redirect_uris TEXT NOT NULL,
+    criado_em     TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+)
+"""
+
+_CREATE_OAUTH_AUTH_CODES = """
+CREATE TABLE IF NOT EXISTS oauth_auth_codes (
+    codigo               TEXT PRIMARY KEY,
+    client_id            TEXT NOT NULL,
+    redirect_uri          TEXT NOT NULL,
+    code_challenge        TEXT NOT NULL,
+    code_challenge_method TEXT NOT NULL,
+    usuario_id            INTEGER NOT NULL,
+    usado                 INTEGER NOT NULL DEFAULT 0,
+    expira_em             TEXT NOT NULL,
+    criado_em             TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+)
+"""
+
+_CREATE_OAUTH_ACCESS_TOKENS = """
+CREATE TABLE IF NOT EXISTS oauth_access_tokens (
+    token_hash TEXT PRIMARY KEY,
+    usuario_id INTEGER NOT NULL,
+    client_id  TEXT NOT NULL,
+    expira_em  TEXT NOT NULL,
+    criado_em  TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+)
+"""
+
 
 def _conectar() -> sqlite3.Connection:
     """
@@ -112,6 +153,9 @@ def init_db() -> None:
         for nome_coluna, definicao_sql in _MIGRACOES_COLUNAS_USUARIOS:
             if nome_coluna not in colunas_usuarios_existentes:
                 conn.execute(f"ALTER TABLE usuarios ADD COLUMN {nome_coluna} {definicao_sql}")
+        conn.execute(_CREATE_OAUTH_CLIENTS)
+        conn.execute(_CREATE_OAUTH_AUTH_CODES)
+        conn.execute(_CREATE_OAUTH_ACCESS_TOKENS)
         conn.commit()
 
 
@@ -240,6 +284,114 @@ def buscar_medico_por_token_hash(token_hash: str) -> Optional[dict]:
     with _conectar() as conn:
         row = conn.execute(sql, (token_hash,)).fetchone()
     return dict(row) if row else None
+
+
+def criar_oauth_client(client_id: str, client_name: str, redirect_uris_json: str) -> None:
+    """Registra um novo cliente OAuth (Dynamic Client Registration, ex.: a própria Claude)."""
+    sql = "INSERT INTO oauth_clients (client_id, client_name, redirect_uris) VALUES (?,?,?)"
+    with _conectar() as conn:
+        conn.execute(sql, (client_id, client_name, redirect_uris_json))
+        conn.commit()
+
+
+def buscar_oauth_client(client_id: str) -> Optional[dict]:
+    """Retorna o cliente OAuth registrado, ou None."""
+    sql = "SELECT * FROM oauth_clients WHERE client_id = ?"
+    with _conectar() as conn:
+        row = conn.execute(sql, (client_id,)).fetchone()
+    return dict(row) if row else None
+
+
+def criar_oauth_auth_code(
+    codigo: str,
+    client_id: str,
+    redirect_uri: str,
+    code_challenge: str,
+    code_challenge_method: str,
+    usuario_id: int,
+) -> None:
+    """Grava um código de autorização (uso único, válido por 5 minutos) após o login do médico."""
+    sql = """
+        INSERT INTO oauth_auth_codes
+            (codigo, client_id, redirect_uri, code_challenge, code_challenge_method, usuario_id, expira_em)
+        VALUES (?,?,?,?,?,?, datetime('now','localtime','+5 minutes'))
+    """
+    with _conectar() as conn:
+        conn.execute(sql, (codigo, client_id, redirect_uri, code_challenge, code_challenge_method, usuario_id))
+        conn.commit()
+
+
+def consumir_oauth_auth_code(codigo: str) -> Optional[dict]:
+    """
+    Busca e consome (marca como usado) um código de autorização ainda válido e não usado.
+
+    Retorna os dados do código (para validação de client_id/redirect_uri/PKCE pelo
+    chamador) ou None se não existir, já tiver sido usado, ou tiver expirado. O
+    UPDATE com `WHERE usado = 0` garante que o código nunca seja consumido duas
+    vezes, mesmo sob chamadas concorrentes.
+    """
+    with _conectar() as conn:
+        row = conn.execute(
+            "SELECT * FROM oauth_auth_codes WHERE codigo = ? AND usado = 0 AND expira_em > datetime('now','localtime')",
+            (codigo,),
+        ).fetchone()
+        if not row:
+            return None
+        cursor = conn.execute(
+            "UPDATE oauth_auth_codes SET usado = 1 WHERE codigo = ? AND usado = 0", (codigo,)
+        )
+        conn.commit()
+        if cursor.rowcount == 0:
+            return None
+        return dict(row)
+
+
+def criar_oauth_access_token(token_hash: str, usuario_id: int, client_id: str, dias_validade: int = 180) -> None:
+    """Grava o hash de um novo access token do conector MCP, válido por `dias_validade` dias."""
+    sql = f"""
+        INSERT INTO oauth_access_tokens (token_hash, usuario_id, client_id, expira_em)
+        VALUES (?,?,?, datetime('now','localtime','+{int(dias_validade)} days'))
+    """
+    with _conectar() as conn:
+        conn.execute(sql, (token_hash, usuario_id, client_id))
+        conn.commit()
+
+
+def buscar_medico_por_oauth_token_hash(token_hash: str) -> Optional[dict]:
+    """
+    Resolve um access token OAuth do conector MCP (já em hash) para a conta de
+    médico dona dele — só retorna a conta se o token existir, não tiver
+    expirado, e a conta for de médico ativo (mesmas garantias do token de API
+    tradicional, ver `buscar_medico_por_token_hash`).
+    """
+    sql = """
+        SELECT u.* FROM oauth_access_tokens t
+        JOIN usuarios u ON u.id = t.usuario_id
+        WHERE t.token_hash = ? AND t.expira_em > datetime('now','localtime')
+              AND u.perfil = 'medico' AND u.ativo = 1
+    """
+    with _conectar() as conn:
+        row = conn.execute(sql, (token_hash,)).fetchone()
+    return dict(row) if row else None
+
+
+def contar_oauth_access_tokens_ativos(usuario_id: int) -> int:
+    """Quantos access tokens do conector MCP ainda válidos (não expirados) esse médico tem."""
+    sql = """
+        SELECT COUNT(*) AS n FROM oauth_access_tokens
+        WHERE usuario_id = ? AND expira_em > datetime('now','localtime')
+    """
+    with _conectar() as conn:
+        row = conn.execute(sql, (usuario_id,)).fetchone()
+    return int(row["n"])
+
+
+def revogar_oauth_access_tokens(usuario_id: int) -> int:
+    """Remove todos os access tokens do conector MCP desse médico. Retorna quantos foram removidos."""
+    with _conectar() as conn:
+        cursor = conn.execute("DELETE FROM oauth_access_tokens WHERE usuario_id = ?", (usuario_id,))
+        conn.commit()
+        return cursor.rowcount
 
 
 def salvar_atestado(
