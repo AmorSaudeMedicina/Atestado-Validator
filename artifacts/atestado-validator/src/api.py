@@ -177,7 +177,7 @@ def registrar_atestado_core(medico: dict, corpo: dict, request: Request | None =
 
 async def registrar_atestado(request: Request) -> Response:
     """
-    POST /api/atestados
+    POST /atestados
 
     Cabeçalho: Authorization: Bearer <token do médico>
 
@@ -212,16 +212,34 @@ async def registrar_atestado(request: Request) -> Response:
     return JSONResponse(resultado, status_code=201)
 
 
+_HEADERS_QR = {
+    # Permite que qualquer servidor externo (Canva, Make, Zapier, etc.) busque
+    # a imagem diretamente, inclusive via fetch de browser (sem bloqueio CORS).
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, OPTIONS",
+    "Access-Control-Allow-Headers": "*",
+    # QR Code é imutável para um dado `codigo` — pode ser cacheado por CDNs e
+    # browsers por 1 hora sem precisar revalidar no servidor.
+    "Cache-Control": "public, max-age=3600, immutable",
+}
+
+
 async def obter_qr_code(request: Request) -> Response:
     """
     GET /api/atestados/{codigo}/qrcode.png
+    OPTIONS /api/atestados/{codigo}/qrcode.png  (preflight CORS)
 
     Endpoint público (sem autenticação) — mesmo nível de acesso da página de
     verificação pública já existente (?codigo=...): o `codigo` em si é o
     segredo (32 bytes aleatórios, improvável de adivinhar), não o token do
     médico. Isso é o que permite que ferramentas externas (ex.: Canva) baixem
-    a imagem do QR Code diretamente por URL.
+    a imagem do QR Code diretamente por URL, sem login nem JavaScript.
     """
+    # Responde ao preflight CORS enviado por browsers/ferramentas antes do GET.
+    # Responde ao preflight CORS enviado por browsers/ferramentas antes do GET.
+    if request.method == "OPTIONS":
+        return Response(status_code=204, headers=_HEADERS_QR)
+
     codigo = request.path_params["codigo"]
     atestado = buscar_atestado_por_codigo(codigo)
     if not atestado:
@@ -231,5 +249,5 @@ async def obter_qr_code(request: Request) -> Response:
     return Response(
         content=qr_bytes,
         media_type="image/png",
-        headers={"Cache-Control": "no-store"},
+        headers=_HEADERS_QR,
     )

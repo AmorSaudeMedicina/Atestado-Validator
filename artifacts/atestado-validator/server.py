@@ -84,8 +84,8 @@ app = App(
     _SCRIPT_PATH,
     routes=[
         Route("/healthz", healthz, methods=["GET"]),
-        Route("/api/atestados", registrar_atestado, methods=["POST"]),
-        Route("/api/atestados/{codigo}/qrcode.png", obter_qr_code, methods=["GET"]),
+        Route("/atestados", registrar_atestado, methods=["POST"]),
+        Route("/atestados/{codigo}/qrcode.png", obter_qr_code, methods=["GET", "OPTIONS"]),
         Route("/mcp", mcp_endpoint, methods=["GET", "POST"]),
         Route("/.well-known/oauth-authorization-server", metadados_authorization_server, methods=["GET"]),
         Route("/.well-known/oauth-protected-resource", metadados_protected_resource, methods=["GET"]),

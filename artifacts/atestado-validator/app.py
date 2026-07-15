@@ -487,8 +487,8 @@ def _secao_token_api(usuario_alvo: dict, quem_gerencia: str) -> None:
 def _secao_api_integracoes() -> None:
     """Explicação em português simples de como usar a API de registro programático."""
     with st.expander("🔌 API / Integrações"):
-        endereco_registro = f"{_url_base()}api/atestados"
-        endereco_qr = f"{_url_base()}api/atestados/{{codigo}}/qrcode.png"
+        endereco_registro = f"{_url_base()}atestados"
+        endereco_qr = f"{_url_base()}atestados/{{codigo}}/qrcode.png"
         st.markdown(
             f"""
 Além do formulário acima, é possível registrar atestados **automaticamente**, de um
@@ -556,7 +556,7 @@ verificação e o QR Code.
 não leva token nenhum, o login é feito depois, na própria Claude):
 
 ```
-{endereco_registro.rsplit("/api/atestados", 1)[0]}/mcp
+{endereco_registro.rsplit("/atestados", 1)[0]}/mcp
 ```
 
 **Passo a passo para conectar na Claude:**

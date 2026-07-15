@@ -134,4 +134,4 @@ def url_verificacao(codigo: str, request: "Request | None" = None) -> str:
 
 def url_qr_publica(codigo: str, request: "Request | None" = None) -> str:
     """URL pública da imagem PNG do QR Code de um atestado (para uso por sistemas externos)."""
-    return f"{url_base(request)}api/atestados/{codigo}/qrcode.png"
+    return f"{url_base(request)}atestados/{codigo}/qrcode.png"
