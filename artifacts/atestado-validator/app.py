@@ -135,10 +135,63 @@ semear_usuarios_iniciais()
 # ---------------------------------------------------------------------------
 
 def _injetar_estilo() -> None:
+    # Carrega Nunito Sans do Google Fonts — funciona em dev e em produção
+    st.markdown(
+        """
+        <link rel="preconnect" href="https://fonts.googleapis.com">
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link href="https://fonts.googleapis.com/css2?family=Nunito+Sans:ital,opsz,wght@0,6..12,300;0,6..12,400;0,6..12,600;0,6..12,700;0,6..12,800;0,6..12,900;1,6..12,400&display=swap" rel="stylesheet">
+        """,
+        unsafe_allow_html=True,
+    )
     st.markdown(
         f"""
         <style>
-        /* Fundo geral da página */
+        /* ─────────────────────────────────────────────
+           TIPOGRAFIA — Nunito Sans, hierarquia em 4 níveis
+           ───────────────────────────────────────────── */
+        html, body, [class*="css"], .stApp,
+        button, input, textarea, select {{
+            font-family: 'Nunito Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+        }}
+        /* Nível 1 — título de página / status principal */
+        h1 {{
+            font-size: 1.75rem !important; font-weight: 800 !important;
+            line-height: 1.2 !important; color: {COR_TEXTO} !important;
+            letter-spacing: -0.01em !important;
+        }}
+        /* Nível 2 — cabeçalho de seção */
+        h2 {{
+            font-size: 1.375rem !important; font-weight: 700 !important;
+            line-height: 1.25 !important; color: {COR_TEXTO} !important;
+        }}
+        /* Nível 3 — sub-seção / card title */
+        h3 {{
+            font-size: 1.0625rem !important; font-weight: 700 !important;
+            line-height: 1.35 !important; color: {COR_TEXTO} !important;
+            letter-spacing: 0.005em !important;
+        }}
+        p, li {{
+            font-size: 0.9375rem !important; line-height: 1.65 !important;
+            color: {COR_TEXTO};
+        }}
+        /* Labels de campos — menores, peso médio, cor suave */
+        [data-testid="stTextInput"] label,
+        [data-testid="stNumberInput"] label,
+        [data-testid="stDateInput"] label,
+        [data-testid="stTextArea"] label,
+        [data-testid="stRadio"] > label,
+        [data-testid="stRadio"] > div > label {{
+            font-size: 0.8125rem !important;
+            font-weight: 600 !important;
+            letter-spacing: 0.02em !important;
+            color: {COR_TEXTO} !important;
+            opacity: 0.7 !important;
+        }}
+
+        /* ─────────────────────────────────────────────
+           FUNDO E CORES
+           ───────────────────────────────────────────── */
         .stApp {{
             background-color: {COR_FUNDO_CLARO} !important;
         }}
@@ -151,27 +204,28 @@ def _injetar_estilo() -> None:
         html, body, [class*="css"] {{
             color: {COR_TEXTO};
         }}
-        h1, h2, h3, h4, p, span, label, .stMarkdown, .stCaption {{
-            color: {COR_TEXTO};
-        }}
 
-        /* Cards com borda (st.container(border=True)) — fundo branco, sombra suave */
+        /* ─────────────────────────────────────────────
+           CARDS (st.container border=True)
+           ───────────────────────────────────────────── */
         [data-testid="stVerticalBlockBorderWrapper"] {{
-            border-radius: 14px !important;
-            box-shadow: 0 2px 14px rgba(95, 194, 212, 0.15) !important;
+            border-radius: 12px !important;
+            box-shadow: 0 1px 6px rgba(95,194,212,0.10), 0 4px 16px rgba(0,0,0,0.04) !important;
             background-color: {COR_BRANCO} !important;
             border-color: {COR_BORDA} !important;
         }}
 
-        /* Formulários — fundo branco, nunca escuro */
+        /* ─────────────────────────────────────────────
+           FORMULÁRIOS
+           ───────────────────────────────────────────── */
         [data-testid="stForm"] {{
             background-color: {COR_BRANCO} !important;
-            border-radius: 14px !important;
+            border-radius: 12px !important;
             padding: 1.5rem !important;
             border: 1px solid {COR_BORDA} !important;
         }}
 
-        /* Campos de texto, número, data, seleção, textarea — fundo branco + texto escuro legível */
+        /* Campos — fundo branco, borda suave, foco verde-água */
         [data-testid="stTextInput"] input,
         [data-testid="stNumberInput"] input,
         [data-testid="stDateInput"] input,
@@ -180,14 +234,26 @@ def _injetar_estilo() -> None:
         [data-baseweb="select"] > div {{
             background-color: {COR_BRANCO} !important;
             color: {COR_TEXTO} !important;
-            border: 1px solid {COR_BORDA} !important;
+            border: 1.5px solid {COR_BORDA} !important;
+            border-radius: 8px !important;
+            font-family: 'Nunito Sans', sans-serif !important;
+            font-size: 0.9375rem !important;
+        }}
+        [data-testid="stTextInput"] input:focus,
+        [data-testid="stNumberInput"] input:focus,
+        [data-testid="stTextArea"] textarea:focus {{
+            border-color: {COR_PRIMARIA} !important;
+            box-shadow: 0 0 0 3px rgba(95,194,212,0.18) !important;
+            outline: none !important;
         }}
         [data-testid="stTextInput"], [data-testid="stNumberInput"],
         [data-testid="stDateInput"], [data-testid="stTextArea"] {{
             background-color: transparent !important;
         }}
 
-        /* Expander (credenciais de teste) */
+        /* ─────────────────────────────────────────────
+           EXPANDER
+           ───────────────────────────────────────────── */
         [data-testid="stExpander"] {{
             background-color: {COR_BRANCO} !important;
             border: 1px solid {COR_BORDA} !important;
@@ -195,42 +261,79 @@ def _injetar_estilo() -> None:
         }}
         [data-testid="stExpander"] summary {{
             color: {COR_PRIMARIA} !important;
+            font-weight: 600 !important;
+            font-size: 0.9375rem !important;
         }}
 
-        /* Botões primários (CTAs) — vermelho AmorSaúde */
+        /* ─────────────────────────────────────────────
+           BOTÕES — peso tipográfico aumentado
+           ───────────────────────────────────────────── */
         button[kind="primary"] {{
             background-color: {COR_CTA} !important;
             border-color: {COR_CTA} !important;
             color: {COR_BRANCO} !important;
+            font-family: 'Nunito Sans', sans-serif !important;
+            font-weight: 700 !important;
+            font-size: 0.9375rem !important;
+            border-radius: 8px !important;
+            letter-spacing: 0.01em !important;
         }}
         button[kind="primary"]:hover {{
             background-color: #b8241c !important;
             border-color: #b8241c !important;
         }}
-        /* Botões secundários — contorno verde-água, fundo branco */
         button[kind="secondary"] {{
             background-color: {COR_BRANCO} !important;
-            border-color: {COR_PRIMARIA} !important;
+            border: 1.5px solid {COR_PRIMARIA} !important;
             color: {COR_PRIMARIA} !important;
+            font-family: 'Nunito Sans', sans-serif !important;
+            font-weight: 600 !important;
+            font-size: 0.9375rem !important;
+            border-radius: 8px !important;
         }}
         button[kind="secondary"]:hover {{
             border-color: {COR_CTA} !important;
             color: {COR_CTA} !important;
         }}
 
+        /* ─────────────────────────────────────────────
+           MÉTRICAS / CAPTIONS
+           ───────────────────────────────────────────── */
         [data-testid="stMetricValue"] {{
             color: {COR_PRIMARIA} !important;
+            font-weight: 800 !important;
+            font-size: 1.75rem !important;
         }}
         [data-testid="stMetricLabel"] {{
             color: {COR_TEXTO} !important;
+            font-size: 0.8125rem !important;
+        }}
+        [data-testid="stCaption"], .stCaption p {{
+            font-size: 0.8125rem !important;
+            color: {COR_TEXTO} !important;
+            opacity: 0.68 !important;
+        }}
+        /* Código inline */
+        code {{
+            font-size: 0.875rem !important;
+            background-color: {COR_FUNDO_CLARO} !important;
+            border: 1px solid {COR_BORDA} !important;
+            border-radius: 4px !important;
+            padding: 0.1em 0.35em !important;
+            color: {COR_PRIMARIA} !important;
         }}
 
+        /* ─────────────────────────────────────────────
+           DIVISORES — ritmo de 8pt (2rem = 32px de gap)
+           ───────────────────────────────────────────── */
         hr {{
             border-color: {COR_BORDA} !important;
+            margin: 2rem 0 !important;
         }}
 
-        /* Impressão — página de verificação: some com o cromo do Streamlit e
-           com os controles que não fazem sentido num comprovante impresso. */
+        /* ─────────────────────────────────────────────
+           IMPRESSÃO
+           ───────────────────────────────────────────── */
         @media print {{
             [data-testid="stToolbar"], [data-testid="stStatusWidget"],
             [data-testid="stDecoration"], header[data-testid="stHeader"],
@@ -266,7 +369,7 @@ def _logo_html(altura_px: int = 48, cor_fallback: str = COR_PRIMARIA) -> str:
         )
     return (
         f'<span style="font-size:{altura_px * 0.55}px; font-weight:800; '
-        f'color:{cor_fallback}; font-family:sans-serif;">AmorSaúde</span>'
+        f'color:{cor_fallback}; font-family:\'Nunito Sans\',sans-serif;">AmorSaúde</span>'
     )
 
 
@@ -284,16 +387,16 @@ def _barra_cabecalho(conteudo_direita: str = "") -> None:
     # fundo teal do cabeçalho ela ficaria "invisível" (mesma cor do fundo).
     # Por isso a logo fica sobre uma placa branca, como no cartão de login.
     html_str = (
-        f'<div style="background-color:{COR_PRIMARIA}; padding:1.3rem 1.8rem; '
+        f'<div style="background-color:{COR_PRIMARIA}; padding:1rem 1.5rem; '
         f'border-radius:14px; display:flex; align-items:center; '
-        f'justify-content:space-between; margin-bottom:1.8rem; gap:1rem; '
-        f'box-shadow:0 2px 10px rgba(0,0,0,0.08);">'
-        f'<div style="background-color:{COR_BRANCO}; border-radius:10px; '
-        f'padding:0.45rem 0.9rem; display:flex; align-items:center; '
+        f'justify-content:space-between; margin-bottom:2rem; gap:1rem; '
+        f'box-shadow:0 2px 12px rgba(0,0,0,0.10);">'
+        f'<div style="background-color:{COR_BRANCO}; border-radius:8px; '
+        f'padding:0.375rem 0.75rem; display:flex; align-items:center; '
         f'min-width:0; flex-shrink:0;">'
-        f'{_logo_html(40, cor_fallback=COR_PRIMARIA)}'
+        f'{_logo_html(38, cor_fallback=COR_PRIMARIA)}'
         f'</div>'
-        f'<div style="color:{COR_BRANCO}; text-align:right;">{conteudo_direita}</div>'
+        f'<div style="color:{COR_BRANCO}; text-align:right; font-family:\'Nunito Sans\',sans-serif;">{conteudo_direita}</div>'
         f'</div>'
     )
     st.markdown(html_str, unsafe_allow_html=True)
@@ -301,12 +404,13 @@ def _barra_cabecalho(conteudo_direita: str = "") -> None:
 
 def _caixa_mensagem(texto: str, cor_fundo: str, cor_texto: str = COR_BRANCO, icone: str = "") -> None:
     """Caixa de mensagem customizada (usada para o estado de atestado inválido em coral)."""
-    icone_html = f'<span style="margin-right:0.5rem; vertical-align:middle;">{icone}</span>' if icone else ""
+    icone_html = f'<span style="margin-right:0.5rem; vertical-align:middle; flex-shrink:0;">{icone}</span>' if icone else ""
     st.markdown(
         f"""
-        <div style="background-color:{cor_fundo}; color:{cor_texto}; padding:1rem 1.2rem;
-                    border-radius:10px; font-weight:600; margin:0.6rem 0;
-                    display:flex; align-items:center; gap:0.5rem;">
+        <div style="background-color:{cor_fundo}; color:{cor_texto}; padding:1rem 1.5rem;
+                    border-radius:10px; font-weight:700; font-size:0.9375rem;
+                    font-family:'Nunito Sans',sans-serif; margin:0.5rem 0;
+                    display:flex; align-items:center; gap:0.75rem;">
             {icone_html}{texto}
         </div>
         """,
@@ -322,19 +426,22 @@ def _selo_status(icone_svg: str, titulo: str, cor: str, cor_fundo: str, subtitul
     de passá-los, para evitar regressões se um novo call site esquecer disso.
     """
     subtitulo_html = (
-        f'<p style="color:{COR_TEXTO}; font-size:0.95rem; max-width:32rem; '
-        f'margin:0.5rem auto 0 auto;">{html.escape(subtitulo)}</p>'
+        f'<p style="color:{COR_TEXTO}; font-size:0.9375rem; max-width:32rem; '
+        f'margin:0.75rem auto 0 auto; line-height:1.6; opacity:0.85; '
+        f'font-family:\'Nunito Sans\',sans-serif;">{html.escape(subtitulo)}</p>'
         if subtitulo
         else ""
     )
     st.markdown(
         f"""
-        <div style="text-align:center; padding:1.6rem 1rem 0.6rem 1rem;">
-            <div style="width:76px; height:76px; border-radius:50%; background-color:{cor_fundo};
-                        display:flex; align-items:center; justify-content:center; margin:0 auto 1rem auto;">
+        <div style="text-align:center; padding:2rem 1rem 1rem 1rem; font-family:'Nunito Sans',sans-serif;">
+            <div style="width:80px; height:80px; border-radius:50%; background-color:{cor_fundo};
+                        display:flex; align-items:center; justify-content:center; margin:0 auto 1.25rem auto;
+                        box-shadow:0 2px 12px rgba(0,0,0,0.08);">
                 {icone_svg}
             </div>
-            <h1 style="color:{cor}; margin:0; font-size:1.55rem; font-weight:800;">{titulo}</h1>
+            <h1 style="color:{cor}; margin:0; font-size:1.625rem; font-weight:800;
+                       letter-spacing:-0.01em; font-family:'Nunito Sans',sans-serif;">{titulo}</h1>
             {subtitulo_html}
         </div>
         """,
@@ -343,11 +450,13 @@ def _selo_status(icone_svg: str, titulo: str, cor: str, cor_fundo: str, subtitul
 
 
 def _frase_confianca() -> None:
-    icone = _svg("shield-check", 14, COR_PRIMARIA, "margin-right:0.35rem")
+    icone = _svg("shield-check", 13, COR_PRIMARIA, "margin-right:0.3rem; flex-shrink:0")
     st.markdown(
         f"""
-        <p style="text-align:center; color:{COR_TEXTO}; opacity:0.85; font-size:0.9rem;
-                  margin:0 0 1.4rem 0; display:flex; align-items:center; justify-content:center; gap:0.3rem;">
+        <p style="text-align:center; color:{COR_TEXTO}; opacity:0.72; font-size:0.8125rem;
+                  font-weight:600; letter-spacing:0.02em; font-family:'Nunito Sans',sans-serif;
+                  margin:0.25rem 0 1.5rem 0; display:flex; align-items:center;
+                  justify-content:center; gap:0.25rem;">
             {icone} Atestado emitido e registrado na plataforma AmorSaúde
         </p>
         """,
@@ -361,11 +470,11 @@ def _bloco_metadados_verificacao(codigo: str, rotulo_codigo: str = "Código de a
     st.markdown(
         f"""
         <div style="background-color:{COR_FUNDO_CLARO}; border:1px solid {COR_BORDA};
-                    border-radius:10px; padding:0.85rem 1.1rem; margin-top:1rem; font-size:0.82rem;
-                    color:{COR_TEXTO};">
-            <div style="display:flex; justify-content:space-between; flex-wrap:wrap; gap:0.4rem 1rem;">
-                <span><strong>Verificado em:</strong> {agora}</span>
-                <span style="word-break:break-all;"><strong>{rotulo_codigo}:</strong> <code>{html.escape(codigo)}</code></span>
+                    border-radius:8px; padding:1rem 1.25rem; margin-top:1.5rem;
+                    font-size:0.8125rem; font-family:'Nunito Sans',sans-serif; color:{COR_TEXTO};">
+            <div style="display:flex; justify-content:space-between; flex-wrap:wrap; gap:0.5rem 1.5rem;">
+                <span><strong style="font-weight:700;">Verificado em:</strong>&nbsp;{agora}</span>
+                <span style="word-break:break-all;"><strong style="font-weight:700;">{rotulo_codigo}:</strong>&nbsp;<code style="font-size:0.75rem; background:{COR_BRANCO}; padding:0.1em 0.3em; border-radius:4px; border:1px solid {COR_BORDA};">{html.escape(codigo)}</code></span>
             </div>
         </div>
         """,
@@ -377,9 +486,10 @@ def _campo_dado(rotulo: str, valor: str) -> None:
     """Par rótulo/valor sem truncar texto longo (ao contrário de st.metric)."""
     st.markdown(
         f"""
-        <div style="margin-bottom:1rem;">
-            <div style="color:{COR_TEXTO}; opacity:0.7; font-size:0.82rem; margin-bottom:0.15rem;">{rotulo}</div>
-            <div style="color:{COR_TEXTO}; font-size:1.35rem; font-weight:700; line-height:1.25;
+        <div style="margin-bottom:1.25rem; font-family:'Nunito Sans',sans-serif;">
+            <div style="color:{COR_TEXTO}; opacity:0.6; font-size:0.75rem; font-weight:600;
+                        letter-spacing:0.04em; text-transform:uppercase; margin-bottom:0.25rem;">{rotulo}</div>
+            <div style="color:{COR_TEXTO}; font-size:1.1875rem; font-weight:700; line-height:1.3;
                         word-break:break-word;">{html.escape(str(valor))}</div>
         </div>
         """,
@@ -389,13 +499,15 @@ def _campo_dado(rotulo: str, valor: str) -> None:
 
 def _campo_cid_protegido() -> None:
     """Campo especial para o CID — exibe ícone de cadeado em vez do valor real."""
-    icone = _svg("lock", 15, COR_TEXTO, "opacity:0.55; margin-right:0.35rem")
+    icone = _svg("lock", 14, COR_TEXTO, "opacity:0.45; margin-right:0.375rem; flex-shrink:0")
     st.markdown(
         f"""
-        <div style="margin-bottom:1rem;">
-            <div style="color:{COR_TEXTO}; opacity:0.7; font-size:0.82rem; margin-bottom:0.15rem;">Diagnóstico (CID)</div>
-            <div style="color:{COR_TEXTO}; font-size:1.05rem; font-weight:600; display:flex; align-items:center;">
-                {icone}<span style="opacity:0.7;">Protegido por sigilo médico</span>
+        <div style="margin-bottom:1.25rem; font-family:'Nunito Sans',sans-serif;">
+            <div style="color:{COR_TEXTO}; opacity:0.6; font-size:0.75rem; font-weight:600;
+                        letter-spacing:0.04em; text-transform:uppercase; margin-bottom:0.25rem;">Diagnóstico (CID)</div>
+            <div style="color:{COR_TEXTO}; font-size:0.9375rem; font-weight:600;
+                        display:flex; align-items:center; opacity:0.65;">
+                {icone}<span>Protegido por sigilo médico</span>
             </div>
         </div>
         """,
@@ -404,17 +516,21 @@ def _campo_cid_protegido() -> None:
 
 
 def _bloco_como_funciona() -> None:
-    icone = _svg("info", 14, COR_PRIMARIA, "margin-right:0.4rem; flex-shrink:0")
+    icone = _svg("info", 14, COR_PRIMARIA, "margin-right:0.5rem; flex-shrink:0")
     st.markdown(
         f"""
-        <div style="background-color:{COR_BRANCO}; border:1px solid {COR_BORDA}; border-radius:12px;
-                    padding:1rem 1.2rem; margin-top:1rem; font-size:0.85rem; color:{COR_TEXTO};">
-            <div style="display:flex; align-items:center; font-weight:700; margin-bottom:0.5rem;">
+        <div style="background-color:{COR_BRANCO}; border:1px solid {COR_BORDA}; border-radius:10px;
+                    padding:1rem 1.25rem; margin-top:1.5rem; font-size:0.875rem; color:{COR_TEXTO};
+                    font-family:'Nunito Sans',sans-serif; line-height:1.6;">
+            <div style="display:flex; align-items:center; font-weight:700; font-size:0.875rem;
+                        margin-bottom:0.5rem; color:{COR_PRIMARIA};">
                 {icone} Como funciona esta verificação
             </div>
+            <span style="opacity:0.82;">
             A autenticidade deste atestado é confirmada diretamente na fonte — a base de dados da
             plataforma AmorSaúde — a cada consulta feita por este link ou QR Code. Nenhum dado de quem
             realiza esta consulta é coletado ou armazenado.
+            </span>
         </div>
         """,
         unsafe_allow_html=True,
@@ -426,10 +542,11 @@ def _botao_imprimir() -> None:
     svg_printer = _svg("printer", 15, COR_PRIMARIA, "margin-right:0.4rem; vertical-align:middle")
     html_conteudo = f"""
     <button id="btn-imprimir-comprovante"
-            style="background-color:{COR_BRANCO}; color:{COR_PRIMARIA}; border:1px solid {COR_PRIMARIA};
-                   border-radius:8px; padding:0.55rem 1rem; cursor:pointer; font-size:0.88rem;
-                   font-weight:600; width:100%; font-family:sans-serif;
-                   display:flex; align-items:center; justify-content:center; gap:0.3rem;">
+            style="background-color:{COR_BRANCO}; color:{COR_PRIMARIA}; border:1.5px solid {COR_PRIMARIA};
+                   border-radius:8px; padding:0.5rem 1rem; cursor:pointer; font-size:0.875rem;
+                   font-weight:700; width:100%; font-family:'Nunito Sans',sans-serif;
+                   letter-spacing:0.01em;
+                   display:flex; align-items:center; justify-content:center; gap:0.375rem;">
         {svg_printer} Imprimir comprovante
     </button>
     <script>
@@ -465,10 +582,11 @@ def _botao_copiar_link(url: str, chave: str) -> None:
     html_conteudo = f"""
     <button id="{id_seguro}" data-url="{url_escapada}" data-default="{svg_default_escaped}"
             style="background-color:{COR_BRANCO}; color:{COR_PRIMARIA};
-                   border:1px solid {COR_PRIMARIA}; border-radius:6px;
-                   padding:0.42rem 0.6rem; cursor:pointer; font-size:0.82rem;
-                   width:100%; font-family:sans-serif;
-                   display:flex; align-items:center; justify-content:center; gap:0.3rem;">
+                   border:1.5px solid {COR_PRIMARIA}; border-radius:8px;
+                   padding:0.5rem 0.75rem; cursor:pointer; font-size:0.8125rem;
+                   font-weight:700; width:100%; font-family:'Nunito Sans',sans-serif;
+                   letter-spacing:0.01em;
+                   display:flex; align-items:center; justify-content:center; gap:0.375rem;">
         {svg_clipboard}&nbsp;Copiar link
     </button>
     <script>
@@ -812,7 +930,9 @@ def tela_verificacao(codigo: str) -> None:
                 _frase_confianca()
 
                 st.markdown(
-                    f'<p style="color:{COR_TEXTO}; font-weight:700; margin-bottom:0.2rem;">'
+                    f'<p style="color:{COR_TEXTO}; font-weight:700; font-size:0.875rem; '
+                    f'letter-spacing:0.04em; text-transform:uppercase; opacity:0.6; '
+                    f'font-family:\'Nunito Sans\',sans-serif; margin:0 0 0.75rem 0;">'
                     f'Dados validados</p>',
                     unsafe_allow_html=True,
                 )
@@ -852,11 +972,16 @@ def tela_login() -> None:
                 unsafe_allow_html=True,
             )
             st.markdown(
-                f'<h2 style="text-align:center; color:{COR_PRIMARIA}; margin-bottom:0;">Portal do Médico</h2>',
+                f'<h2 style="text-align:center; color:{COR_PRIMARIA}; margin:0.75rem 0 0 0; '
+                f'font-size:1.5rem; font-weight:800; font-family:\'Nunito Sans\',sans-serif; '
+                f'letter-spacing:-0.01em;">Portal do Médico</h2>',
                 unsafe_allow_html=True,
             )
             st.markdown(
-                f'<p style="text-align:center; color:{COR_TEXTO};">Acesso ao sistema de emissão de atestados</p>',
+                f'<p style="text-align:center; color:{COR_TEXTO}; opacity:0.72; '
+                f'font-size:0.9375rem; margin:0.25rem 0 1rem 0; '
+                f'font-family:\'Nunito Sans\',sans-serif;">'
+                f'Acesso ao sistema de emissão de atestados</p>',
                 unsafe_allow_html=True,
             )
 
@@ -920,8 +1045,8 @@ def tela_admin() -> None:
         st.stop()
 
     conteudo_direita = (
-        f'<div style="font-size:1.2rem; font-weight:700;">{html.escape(admin["nome"])}</div>'
-        f'<div style="font-size:0.88rem; opacity:0.92;">Administrador</div>'
+        f'<div style="font-size:1.0625rem; font-weight:800; letter-spacing:-0.01em;">{html.escape(admin["nome"])}</div>'
+        f'<div style="font-size:0.8125rem; font-weight:600; opacity:0.85; letter-spacing:0.02em;">Administrador</div>'
     )
     _barra_cabecalho(conteudo_direita)
 
@@ -931,9 +1056,10 @@ def tela_admin() -> None:
             del st.session_state["usuario"]
             st.rerun()
 
-    icone_cadastrar = _svg("user-plus", 18, COR_PRIMARIA, "margin-right:0.45rem; vertical-align:middle")
+    icone_cadastrar = _svg("user-plus", 17, COR_PRIMARIA, "margin-right:0.5rem; vertical-align:middle; flex-shrink:0")
     st.markdown(
-        f'<h3 style="color:{COR_PRIMARIA}; margin-top:0; display:flex; align-items:center;">'
+        f'<h3 style="color:{COR_PRIMARIA}; margin-top:0; margin-bottom:1rem; display:flex; align-items:center; '
+        f'font-family:\'Nunito Sans\',sans-serif; font-size:1.0625rem; font-weight:800; letter-spacing:-0.005em;">'
         f'{icone_cadastrar} Cadastrar médico</h3>',
         unsafe_allow_html=True,
     )
@@ -985,9 +1111,10 @@ def tela_admin() -> None:
     st.write("")
     st.divider()
 
-    icone_lista = _svg("list", 18, COR_PRIMARIA, "margin-right:0.45rem; vertical-align:middle")
+    icone_lista = _svg("list", 17, COR_PRIMARIA, "margin-right:0.5rem; vertical-align:middle; flex-shrink:0")
     st.markdown(
-        f'<h3 style="color:{COR_PRIMARIA}; display:flex; align-items:center;">'
+        f'<h3 style="color:{COR_PRIMARIA}; margin-bottom:1rem; display:flex; align-items:center; '
+        f'font-family:\'Nunito Sans\',sans-serif; font-size:1.0625rem; font-weight:800; letter-spacing:-0.005em;">'
         f'{icone_lista} Médicos cadastrados</h3>',
         unsafe_allow_html=True,
     )
@@ -1002,23 +1129,28 @@ def tela_admin() -> None:
                 col_info, col_status, col_acoes = st.columns([3, 1.2, 2])
                 with col_info:
                     st.markdown(
-                        f'<span style="font-size:1.05rem; font-weight:700; color:{COR_TEXTO};">'
+                        f'<div style="font-family:\'Nunito Sans\',sans-serif;">'
+                        f'<span style="font-size:1rem; font-weight:700; color:{COR_TEXTO}; letter-spacing:-0.005em;">'
                         f'{html.escape(m["nome"])}</span><br>'
-                        f'<span style="color:{COR_TEXTO}; opacity:0.75; font-size:0.85rem;">'
-                        f'{html.escape(m["crm"] or "")} · usuário: {html.escape(m["usuario"])}</span>',
+                        f'<span style="color:{COR_TEXTO}; opacity:0.6; font-size:0.8125rem; font-weight:600; letter-spacing:0.01em;">'
+                        f'{html.escape(m["crm"] or "")} · usuário: <code style="font-size:0.75rem; background:{COR_FUNDO_CLARO}; '
+                        f'padding:0.05em 0.3em; border-radius:4px; border:1px solid {COR_BORDA};">'
+                        f'{html.escape(m["usuario"])}</code></span></div>',
                         unsafe_allow_html=True,
                     )
                 with col_status:
                     if m["ativo"]:
                         st.markdown(
                             f'<span style="background:{COR_FUNDO_CLARO}; color:{COR_PRIMARIA}; '
-                            f'padding:0.2rem 0.6rem; border-radius:20px; font-size:0.78rem; font-weight:700;">● Ativo</span>',
+                            f'padding:0.25rem 0.625rem; border-radius:20px; font-size:0.75rem; font-weight:700; '
+                            f'font-family:\'Nunito Sans\',sans-serif; letter-spacing:0.02em;">Ativo</span>',
                             unsafe_allow_html=True,
                         )
                     else:
                         st.markdown(
                             f'<span style="background:#FBEAEA; color:{COR_SECUNDARIA}; '
-                            f'padding:0.2rem 0.6rem; border-radius:20px; font-size:0.78rem; font-weight:700;">● Inativo</span>',
+                            f'padding:0.25rem 0.625rem; border-radius:20px; font-size:0.75rem; font-weight:700; '
+                            f'font-family:\'Nunito Sans\',sans-serif; letter-spacing:0.02em;">Inativo</span>',
                             unsafe_allow_html=True,
                         )
                 with col_acoes:
@@ -1091,8 +1223,9 @@ def tela_dashboard() -> None:
         st.stop()
 
     conteudo_direita = (
-        f'<div style="font-size:1.2rem; font-weight:700;">{medico["nome"]}</div>'
-        f'<div style="font-size:0.88rem; opacity:0.92;">{medico["especialidade"]} · {medico["crm"]}</div>'
+        f'<div style="font-size:1.0625rem; font-weight:800; letter-spacing:-0.01em;">{html.escape(medico["nome"])}</div>'
+        f'<div style="font-size:0.8125rem; font-weight:600; opacity:0.85; letter-spacing:0.02em;">'
+        f'{html.escape(str(medico["especialidade"] or ""))} · {html.escape(str(medico["crm"] or ""))}</div>'
     )
     _barra_cabecalho(conteudo_direita)
 
@@ -1126,18 +1259,22 @@ def tela_dashboard() -> None:
 
     def _cartao_resumo(icone_svg: str, numero, rotulo: str) -> str:
         return f"""
-        <div style="background:{COR_BRANCO}; border-top:4px solid {COR_PRIMARIA};
-                    border-radius:12px; padding:1.1rem 0.8rem; text-align:center;
-                    box-shadow:0 2px 10px rgba(0,0,0,0.06); height:100%;">
-            <div style="display:flex; justify-content:center; margin-bottom:0.35rem;">{icone_svg}</div>
-            <div style="font-size:1.9rem; font-weight:800; color:{COR_PRIMARIA}; line-height:1.2;">{numero}</div>
-            <div style="color:{COR_TEXTO}; font-size:0.8rem; margin-top:0.15rem;">{rotulo}</div>
+        <div style="background:{COR_BRANCO}; border-top:3px solid {COR_PRIMARIA};
+                    border-radius:10px; padding:1.25rem 0.75rem 1rem 0.75rem; text-align:center;
+                    box-shadow:0 1px 6px rgba(95,194,212,0.10), 0 2px 12px rgba(0,0,0,0.04);
+                    height:100%; font-family:'Nunito Sans',sans-serif;">
+            <div style="display:flex; justify-content:center; margin-bottom:0.5rem; opacity:0.8;">{icone_svg}</div>
+            <div style="font-size:2rem; font-weight:900; color:{COR_PRIMARIA}; line-height:1.1;
+                        letter-spacing:-0.02em;">{numero}</div>
+            <div style="color:{COR_TEXTO}; font-size:0.75rem; font-weight:600; letter-spacing:0.02em;
+                        margin-top:0.375rem; opacity:0.7; line-height:1.3;">{rotulo}</div>
         </div>
         """
 
-    icone_visao = _svg("bar-chart", 18, COR_PRIMARIA, "margin-right:0.45rem; vertical-align:middle")
+    icone_visao = _svg("bar-chart", 17, COR_PRIMARIA, "margin-right:0.5rem; vertical-align:middle; flex-shrink:0")
     st.markdown(
-        f'<h3 style="color:{COR_PRIMARIA}; margin-top:0.5rem; display:flex; align-items:center;">'
+        f'<h3 style="color:{COR_PRIMARIA}; margin-top:0.5rem; margin-bottom:1rem; display:flex; align-items:center; '
+        f'font-family:\'Nunito Sans\',sans-serif; font-size:1.0625rem; font-weight:800; letter-spacing:-0.005em;">'
         f'{icone_visao} Visão geral</h3>',
         unsafe_allow_html=True,
     )
@@ -1162,7 +1299,9 @@ def tela_dashboard() -> None:
     if atestados:
         with st.container(border=True):
             st.markdown(
-                f'<p style="color:{COR_TEXTO}; font-weight:600; margin-bottom:0.4rem;">Atestados emitidos por mês</p>',
+                f'<p style="color:{COR_TEXTO}; font-weight:700; font-size:0.9375rem; '
+                f'font-family:\'Nunito Sans\',sans-serif; margin-bottom:0.5rem; opacity:0.85;">'
+                f'Atestados emitidos por mês</p>',
                 unsafe_allow_html=True,
             )
             contagem_por_mes: dict[str, int] = {}
@@ -1178,9 +1317,10 @@ def tela_dashboard() -> None:
     # -----------------------------------------------------------------------
     # Seção: Emitir novo atestado
     # -----------------------------------------------------------------------
-    icone_emitir = _svg("file-plus", 18, COR_PRIMARIA, "margin-right:0.45rem; vertical-align:middle")
+    icone_emitir = _svg("file-plus", 17, COR_PRIMARIA, "margin-right:0.5rem; vertical-align:middle; flex-shrink:0")
     st.markdown(
-        f'<h3 style="color:{COR_PRIMARIA}; display:flex; align-items:center;">'
+        f'<h3 style="color:{COR_PRIMARIA}; margin-bottom:1rem; display:flex; align-items:center; '
+        f'font-family:\'Nunito Sans\',sans-serif; font-size:1.0625rem; font-weight:800; letter-spacing:-0.005em;">'
         f'{icone_emitir} Emitir novo atestado</h3>',
         unsafe_allow_html=True,
     )
@@ -1314,11 +1454,12 @@ def tela_dashboard() -> None:
     # -----------------------------------------------------------------------
     # Seção: Atestados emitidos
     # -----------------------------------------------------------------------
-    icone_lista = _svg("folder-open", 18, COR_PRIMARIA, "margin-right:0.45rem; vertical-align:middle")
+    icone_lista = _svg("folder-open", 17, COR_PRIMARIA, "margin-right:0.5rem; vertical-align:middle; flex-shrink:0")
     col_titulo_lista, col_export = st.columns([4, 1.4])
     with col_titulo_lista:
         st.markdown(
-            f'<h3 style="color:{COR_PRIMARIA}; display:flex; align-items:center;">'
+            f'<h3 style="color:{COR_PRIMARIA}; margin-bottom:0; display:flex; align-items:center; '
+            f'font-family:\'Nunito Sans\',sans-serif; font-size:1.0625rem; font-weight:800; letter-spacing:-0.005em;">'
             f'{icone_lista} Atestados emitidos por você</h3>',
             unsafe_allow_html=True,
         )
@@ -1360,22 +1501,25 @@ def tela_dashboard() -> None:
                 col_a, col_b = st.columns([3, 1.2])
                 with col_a:
                     st.markdown(
-                        f'<span style="font-size:1.05rem; font-weight:700; color:{COR_TEXTO};">'
-                        f'{html.escape(a["nome_paciente"])}</span>',
+                        f'<div style="font-family:\'Nunito Sans\',sans-serif;">'
+                        f'<span style="font-size:1rem; font-weight:700; color:{COR_TEXTO}; letter-spacing:-0.005em;">'
+                        f'{html.escape(a["nome_paciente"])}</span></div>',
                         unsafe_allow_html=True,
                     )
                 with col_b:
                     if status_atestado == "revogado":
                         st.markdown(
                             f'<span style="background:#FBEAEA; color:{COR_SECUNDARIA}; '
-                            f'padding:0.2rem 0.6rem; border-radius:20px; font-size:0.78rem; font-weight:700;">'
-                            f'● Revogado</span>',
+                            f'padding:0.25rem 0.625rem; border-radius:20px; font-size:0.75rem; font-weight:700; '
+                            f'font-family:\'Nunito Sans\',sans-serif; letter-spacing:0.02em;">'
+                            f'Revogado</span>',
                             unsafe_allow_html=True,
                         )
                     else:
                         st.markdown(
                             f'<span style="background:{COR_FUNDO_CLARO}; color:{COR_PRIMARIA}; '
-                            f'padding:0.2rem 0.6rem; border-radius:20px; font-size:0.78rem; font-weight:700;">● Ativo</span>',
+                            f'padding:0.25rem 0.625rem; border-radius:20px; font-size:0.75rem; font-weight:700; '
+                            f'font-family:\'Nunito Sans\',sans-serif; letter-spacing:0.02em;">Ativo</span>',
                             unsafe_allow_html=True,
                         )
 
@@ -1458,9 +1602,10 @@ def tela_dashboard() -> None:
     st.write("")
     st.divider()
 
-    icone_api = _svg("plug", 18, COR_PRIMARIA, "margin-right:0.45rem; vertical-align:middle")
+    icone_api = _svg("plug", 17, COR_PRIMARIA, "margin-right:0.5rem; vertical-align:middle; flex-shrink:0")
     st.markdown(
-        f'<h3 style="color:{COR_PRIMARIA}; display:flex; align-items:center;">'
+        f'<h3 style="color:{COR_PRIMARIA}; margin-bottom:1rem; display:flex; align-items:center; '
+        f'font-family:\'Nunito Sans\',sans-serif; font-size:1.0625rem; font-weight:800; letter-spacing:-0.005em;">'
         f'{icone_api} Registro automático (API)</h3>',
         unsafe_allow_html=True,
     )
@@ -1473,8 +1618,10 @@ def tela_dashboard() -> None:
 def _rodape() -> None:
     st.markdown(
         f"""
-        <div style="text-align:center; color:{COR_TEXTO}; opacity:0.6;
-                    font-size:0.8rem; padding:1.5rem 0 0.5rem 0;">
+        <div style="text-align:center; color:{COR_TEXTO}; opacity:0.5;
+                    font-size:0.75rem; font-weight:600; letter-spacing:0.04em;
+                    font-family:'Nunito Sans',sans-serif;
+                    padding:2rem 0 1rem 0;">
             AmorSaúde — Validador de Atestados
         </div>
         """,
