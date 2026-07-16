@@ -406,6 +406,111 @@ def _injetar_estilo() -> None:
         }}
 
         /* ─────────────────────────────────────────────
+           BASE — box-sizing + overflow global
+           ───────────────────────────────────────────── */
+        *, *::before, *::after {{
+            box-sizing: border-box !important;
+        }}
+        html, body {{
+            overflow-x: hidden !important;
+            max-width: 100vw !important;
+        }}
+        .stApp, [data-testid="stAppViewBlockContainer"] {{
+            overflow-x: hidden !important;
+        }}
+
+        /* ─────────────────────────────────────────────
+           MOBILE — responsividade (≤ 640px)
+           ───────────────────────────────────────────── */
+        @media (max-width: 640px) {{
+            /* Padding lateral compacto */
+            [data-testid="stAppViewBlockContainer"] {{
+                padding-left: 0.75rem !important;
+                padding-right: 0.75rem !important;
+            }}
+
+            /* Tipografia levemente reduzida no mobile */
+            h1 {{ font-size: 1.25rem !important; }}
+            h2 {{ font-size: 1.0625rem !important; }}
+            p, li {{ font-size: 0.875rem !important; }}
+
+            /* Cabeçalho: padding compacto */
+            .amorsaude-cabecalho {{
+                padding: 0.75rem 1rem !important;
+                margin-bottom: 1.25rem !important;
+                border-radius: 10px !important;
+            }}
+            .amorsaude-logo-wrap {{
+                padding: 0.25rem 0.5rem !important;
+            }}
+
+            /* Selo de verificação: mais compacto */
+            .amorsaude-selo {{
+                padding: 1.25rem 0.5rem 0.75rem !important;
+            }}
+            .amorsaude-selo-circulo {{
+                width: 64px !important;
+                height: 64px !important;
+            }}
+
+            /* Formulários: padding menor */
+            [data-testid="stForm"] {{
+                padding: 1rem 0.875rem !important;
+            }}
+
+            /* 5 colunas → 2 por linha (cards de resumo do dashboard) */
+            [data-testid="stHorizontalBlock"]:has(
+                > [data-testid="column"]:nth-child(5)
+            ) {{
+                flex-wrap: wrap !important;
+                gap: 0.5rem !important;
+            }}
+            [data-testid="stHorizontalBlock"]:has(
+                > [data-testid="column"]:nth-child(5)
+            ) > [data-testid="column"] {{
+                flex: 1 1 calc(50% - 0.5rem) !important;
+                min-width: calc(50% - 0.5rem) !important;
+                max-width: calc(50% - 0.25rem) !important;
+            }}
+
+            /* 4 colunas → 2 por linha (metadados do atestado) */
+            [data-testid="stHorizontalBlock"]:has(
+                > [data-testid="column"]:nth-child(4)
+            ):not(:has(> [data-testid="column"]:nth-child(5))) {{
+                flex-wrap: wrap !important;
+                gap: 0.25rem !important;
+            }}
+            [data-testid="stHorizontalBlock"]:has(
+                > [data-testid="column"]:nth-child(4)
+            ):not(:has(> [data-testid="column"]:nth-child(5)))
+            > [data-testid="column"] {{
+                flex: 1 1 calc(50% - 0.25rem) !important;
+                min-width: calc(50% - 0.25rem) !important;
+            }}
+
+            /* Alvos de toque mínimo 44px */
+            button[kind="primary"],
+            button[kind="secondary"] {{
+                min-height: 44px !important;
+                padding-top: 0.625rem !important;
+                padding-bottom: 0.625rem !important;
+            }}
+            button.amorsaude-btn-outline {{
+                min-height: 44px !important;
+                padding-top: 0.625rem !important;
+                padding-bottom: 0.625rem !important;
+            }}
+
+            /* Inputs confortáveis para toque */
+            [data-testid="stTextInput"] input,
+            [data-testid="stNumberInput"] input,
+            [data-testid="stDateInput"] input {{
+                min-height: 44px !important;
+                font-size: 1rem !important;
+            }}
+        }}
+
+        /* ─────────────────────────────────────────────
            IMPRESSÃO
            ───────────────────────────────────────────── */
         @media print {{
@@ -461,11 +566,11 @@ def _barra_cabecalho(conteudo_direita: str = "") -> None:
     # fundo teal do cabeçalho ela ficaria "invisível" (mesma cor do fundo).
     # Por isso a logo fica sobre uma placa branca, como no cartão de login.
     html_str = (
-        f'<div style="background-color:{COR_PRIMARIA}; padding:1rem 1.5rem; '
+        f'<div class="amorsaude-cabecalho" style="background-color:{COR_PRIMARIA}; padding:1rem 1.5rem; '
         f'border-radius:14px; display:flex; align-items:center; '
         f'justify-content:space-between; margin-bottom:2rem; gap:1rem; '
         f'box-shadow:0 2px 12px rgba(0,0,0,0.10);">'
-        f'<div style="background-color:{COR_BRANCO}; border-radius:8px; '
+        f'<div class="amorsaude-logo-wrap" style="background-color:{COR_BRANCO}; border-radius:8px; '
         f'padding:0.375rem 0.75rem; display:flex; align-items:center; '
         f'min-width:0; flex-shrink:0;">'
         f'{_logo_html(38, cor_fallback=COR_PRIMARIA)}'
@@ -508,8 +613,8 @@ def _selo_status(icone_svg: str, titulo: str, cor: str, cor_fundo: str, subtitul
     )
     st.markdown(
         f"""
-        <div style="text-align:center; padding:2rem 1rem 1rem 1rem; font-family:'Nunito Sans',sans-serif;">
-            <div style="width:80px; height:80px; border-radius:50%; background-color:{cor_fundo};
+        <div class="amorsaude-selo" style="text-align:center; padding:2rem 1rem 1rem 1rem; font-family:'Nunito Sans',sans-serif;">
+            <div class="amorsaude-selo-circulo" style="width:80px; height:80px; border-radius:50%; background-color:{cor_fundo};
                         display:flex; align-items:center; justify-content:center; margin:0 auto 1.25rem auto;
                         box-shadow:0 2px 12px rgba(0,0,0,0.08);">
                 {icone_svg}
@@ -524,15 +629,28 @@ def _selo_status(icone_svg: str, titulo: str, cor: str, cor_fundo: str, subtitul
 
 
 def _frase_confianca() -> None:
-    icone = _svg("shield-check", 13, COR_PRIMARIA, "margin-right:0.3rem; flex-shrink:0")
+    ico_shield = _svg("shield-check", 13, COR_PRIMARIA, "flex-shrink:0")
+    ico_lock   = _svg("lock",         12, COR_PRIMARIA, "flex-shrink:0")
+    ico_eye    = _svg("eye-off",      12, COR_PRIMARIA, "flex-shrink:0")
+
+    def _badge(icone: str, texto: str) -> str:
+        return (
+            f'<span style="display:inline-flex; align-items:center; gap:0.3rem; '
+            f'background:{COR_FUNDO_CLARO}; border:1px solid {COR_BORDA}; '
+            f'border-radius:20px; padding:0.25rem 0.625rem; white-space:nowrap;">'
+            f'{icone}<span>{texto}</span></span>'
+        )
+
     st.markdown(
         f"""
-        <p style="text-align:center; color:{COR_TEXTO}; opacity:0.72; font-size:0.8125rem;
-                  font-weight:600; letter-spacing:0.02em; font-family:'Nunito Sans',sans-serif;
-                  margin:0.25rem 0 1.5rem 0; display:flex; align-items:center;
-                  justify-content:center; gap:0.25rem;">
-            {icone} Atestado emitido e registrado na plataforma AmorSaúde
-        </p>
+        <div style="display:flex; flex-wrap:wrap; justify-content:center; gap:0.5rem;
+                    margin:0.5rem 0 1.5rem 0; font-family:'Nunito Sans',sans-serif;
+                    font-size:0.75rem; font-weight:600; color:{COR_PRIMARIA};
+                    letter-spacing:0.01em;">
+            {_badge(ico_shield, "Registrado na AmorSaúde")}
+            {_badge(ico_lock,   "Conexão segura")}
+            {_badge(ico_eye,    "Consulta não registrada")}
+        </div>
         """,
         unsafe_allow_html=True,
     )
@@ -590,21 +708,30 @@ def _campo_cid_protegido() -> None:
 
 
 def _bloco_como_funciona() -> None:
-    icone = _svg("info", 14, COR_PRIMARIA, "margin-right:0.5rem; flex-shrink:0")
+    ico_info    = _svg("info",     14, COR_PRIMARIA, "flex-shrink:0")
+    ico_shield  = _svg("shield",   13, COR_PRIMARIA, "flex-shrink:0; opacity:0.7")
+    ico_eye_off = _svg("eye-off",  13, COR_PRIMARIA, "flex-shrink:0; opacity:0.7")
+    ico_zap     = _svg("zap",      13, COR_PRIMARIA, "flex-shrink:0; opacity:0.7")
+
+    def _item(icone: str, texto: str) -> str:
+        return (
+            f'<div style="display:flex; align-items:flex-start; gap:0.5rem; '
+            f'margin-top:0.5rem; font-size:0.8125rem; line-height:1.5; opacity:0.82;">'
+            f'{icone}<span>{texto}</span></div>'
+        )
+
     st.markdown(
         f"""
         <div style="background-color:{COR_BRANCO}; border:1px solid {COR_BORDA}; border-radius:10px;
-                    padding:1rem 1.25rem; margin-top:1.5rem; font-size:0.875rem; color:{COR_TEXTO};
-                    font-family:'Nunito Sans',sans-serif; line-height:1.6;">
-            <div style="display:flex; align-items:center; font-weight:700; font-size:0.875rem;
-                        margin-bottom:0.5rem; color:{COR_PRIMARIA};">
-                {icone} Como funciona esta verificação
+                    padding:1rem 1.25rem; margin-top:1.5rem; color:{COR_TEXTO};
+                    font-family:'Nunito Sans',sans-serif;">
+            <div style="display:flex; align-items:center; gap:0.5rem; font-weight:700;
+                        font-size:0.875rem; color:{COR_PRIMARIA}; margin-bottom:0.25rem;">
+                {ico_info} Como funciona esta verificação
             </div>
-            <span style="opacity:0.82;">
-            A autenticidade deste atestado é confirmada diretamente na fonte — a base de dados da
-            plataforma AmorSaúde — a cada consulta feita por este link ou QR Code. Nenhum dado de quem
-            realiza esta consulta é coletado ou armazenado.
-            </span>
+            {_item(ico_zap,     "Verificação em tempo real diretamente na base de dados AmorSaúde — não é um PDF e não pode ser falsificado.")}
+            {_item(ico_shield,  "O resultado exibido é o mesmo a cada leitura do QR Code ou do link, garantindo autenticidade integral.")}
+            {_item(ico_eye_off, "Nenhum dado de quem realiza esta consulta é coletado, registrado ou armazenado.")}
         </div>
         """,
         unsafe_allow_html=True,
@@ -1038,7 +1165,7 @@ def tela_verificacao(codigo: str) -> None:
 # ---------------------------------------------------------------------------
 
 def tela_login() -> None:
-    col_esq, col_centro, col_dir = st.columns([1, 2, 1])
+    col_esq, col_centro, col_dir = st.columns([1, 4, 1])
     with col_centro:
         with st.container(border=True):
             st.markdown(
