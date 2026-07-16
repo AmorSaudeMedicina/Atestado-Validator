@@ -58,6 +58,60 @@ COR_BORDA = "#D7ECEF"
 COR_AMBAR = "#B9770E"       # âmbar neutro — usado apenas no estado "não encontrado"
 COR_AMBAR_FUNDO = "#FDF2E3"
 
+# ---------------------------------------------------------------------------
+# Biblioteca de ícones Lucide (SVG inline — traço de linha, sem preenchimento)
+# Todos os ícones compartilham viewBox="0 0 24 24", stroke-width=2.
+# ---------------------------------------------------------------------------
+_ICO: dict[str, str] = {
+    # estados de atestado
+    "check-circle":   '<circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/>',
+    "x-circle":       '<circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/>',
+    "alert-triangle": '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
+    # navegação / seções
+    "shield-check":   '<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/>',
+    "info":           '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>',
+    "key":            '<path d="M2 18v3c0 .6.4 1 1 1h4v-3h3v-3h2l1.4-1.4a6.5 6.5 0 1 0-4-4Z"/><circle cx="16.5" cy="7.5" r=".5" fill="currentColor"/>',
+    "plug":           '<path d="M12 22v-5"/><path d="M9 8V2"/><path d="M15 8V2"/><path d="M18 8h1a4 4 0 0 1 0 8h-1"/><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/>',
+    "user-plus":      '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" x2="19" y1="8" y2="14"/><line x1="22" x2="16" y1="11" y2="11"/>',
+    "list":           '<line x1="8" x2="21" y1="6" y2="6"/><line x1="8" x2="21" y1="12" y2="12"/><line x1="8" x2="21" y1="18" y2="18"/><line x1="3" x2="3.01" y1="6" y2="6"/><line x1="3" x2="3.01" y1="12" y2="12"/><line x1="3" x2="3.01" y1="18" y2="18"/>',
+    "bar-chart":      '<line x1="18" x2="18" y1="20" y2="10"/><line x1="12" x2="12" y1="20" y2="4"/><line x1="6" x2="6" y1="20" y2="14"/>',
+    "folder-open":    '<path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2"/>',
+    "file-plus":      '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M9 15h6"/><path d="M12 12v6"/>',
+    # cards do dashboard
+    "file-text":      '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/>',
+    "calendar":       '<path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/>',
+    "sun":            '<circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/>',
+    "bed":            '<path d="M3 20v-8a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v8"/><path d="M5 10V6a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v4"/><path d="M3 18h18"/>',
+    "users":          '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
+    # ações
+    "printer":        '<path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 9V3a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v6"/><rect width="12" height="8" x="6" y="14"/>',
+    "clipboard":      '<rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>',
+    "download":       '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/>',
+    "qr-code":        '<rect width="5" height="5" x="3" y="3" rx="1"/><rect width="5" height="5" x="16" y="3" rx="1"/><rect width="5" height="5" x="3" y="16" rx="1"/><path d="M21 16h-3a2 2 0 0 0-2 2v3"/><path d="M21 21v.01"/><path d="M12 7v3a2 2 0 0 1-2 2H7"/><path d="M3 12h.01"/><path d="M12 3h.01"/><path d="M12 16v.01"/><path d="M16 12h1"/><path d="M21 12v.01"/><path d="M12 21v-1"/>',
+    "ban":            '<circle cx="12" cy="12" r="10"/><path d="m4.9 4.9 14.2 14.2"/>',
+    "refresh-cw":     '<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/>',
+    "plus-circle":    '<circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/>',
+    "lock":           '<rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
+    "search":         '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+    "bot":            '<path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/>',
+    "globe":          '<circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/>',
+    "stethoscope":    '<path d="M4.8 2.3A.3.3 0 1 0 5 2H4a2 2 0 0 0-2 2v5a6 6 0 0 0 6 6v0a6 6 0 0 0 6-6V4a2 2 0 0 0-2-2h-1a.2.2 0 1 0 .3.3"/><path d="M8 15v1a6 6 0 0 0 6 6v0a6 6 0 0 0 6-6v-4"/><circle cx="20" cy="10" r="2"/>',
+}
+
+
+def _svg(nome: str, tamanho: int = 16, cor: str = COR_PRIMARIA, estilo_extra: str = "") -> str:
+    """Retorna um ícone Lucide como SVG inline na cor e tamanho especificados."""
+    paths = _ICO.get(nome, "")
+    return (
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{tamanho}" height="{tamanho}" '
+        f'viewBox="0 0 24 24" fill="none" stroke="{cor}" '
+        f'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" '
+        f'style="display:inline-block; vertical-align:middle; flex-shrink:0; {estilo_extra}">'
+        f'{paths}'
+        f'</svg>'
+    )
+
+
 _LOGO_PATH = Path(__file__).resolve().parent / "assets" / "logo-amorsaude.png"
 
 # ---------------------------------------------------------------------------
@@ -65,7 +119,7 @@ _LOGO_PATH = Path(__file__).resolve().parent / "assets" / "logo-amorsaude.png"
 # ---------------------------------------------------------------------------
 st.set_page_config(
     page_title="AmorSaúde — Atestados",
-    page_icon="🩺",
+    page_icon=":material/medical_services:",
     layout="centered",
 )
 
@@ -247,18 +301,20 @@ def _barra_cabecalho(conteudo_direita: str = "") -> None:
 
 def _caixa_mensagem(texto: str, cor_fundo: str, cor_texto: str = COR_BRANCO, icone: str = "") -> None:
     """Caixa de mensagem customizada (usada para o estado de atestado inválido em coral)."""
+    icone_html = f'<span style="margin-right:0.5rem; vertical-align:middle;">{icone}</span>' if icone else ""
     st.markdown(
         f"""
         <div style="background-color:{cor_fundo}; color:{cor_texto}; padding:1rem 1.2rem;
-                    border-radius:10px; font-weight:600; margin:0.6rem 0;">
-            {icone} {texto}
+                    border-radius:10px; font-weight:600; margin:0.6rem 0;
+                    display:flex; align-items:center; gap:0.5rem;">
+            {icone_html}{texto}
         </div>
         """,
         unsafe_allow_html=True,
     )
 
 
-def _selo_status(icone: str, titulo: str, cor: str, cor_fundo: str, subtitulo: str = "") -> None:
+def _selo_status(icone_svg: str, titulo: str, cor: str, cor_fundo: str, subtitulo: str = "") -> None:
     """Selo grande e inequívoco de status, no padrão de validadores oficiais (gov.br/ITI, Atesta CFM).
 
     `subtitulo` é sempre escapado aqui — hardening defensivo, mesmo que os
@@ -275,9 +331,8 @@ def _selo_status(icone: str, titulo: str, cor: str, cor_fundo: str, subtitulo: s
         f"""
         <div style="text-align:center; padding:1.6rem 1rem 0.6rem 1rem;">
             <div style="width:76px; height:76px; border-radius:50%; background-color:{cor_fundo};
-                        display:flex; align-items:center; justify-content:center; margin:0 auto 1rem auto;
-                        font-size:2.3rem; line-height:1;">
-                {icone}
+                        display:flex; align-items:center; justify-content:center; margin:0 auto 1rem auto;">
+                {icone_svg}
             </div>
             <h1 style="color:{cor}; margin:0; font-size:1.55rem; font-weight:800;">{titulo}</h1>
             {subtitulo_html}
@@ -288,11 +343,12 @@ def _selo_status(icone: str, titulo: str, cor: str, cor_fundo: str, subtitulo: s
 
 
 def _frase_confianca() -> None:
+    icone = _svg("shield-check", 14, COR_PRIMARIA, "margin-right:0.35rem")
     st.markdown(
         f"""
         <p style="text-align:center; color:{COR_TEXTO}; opacity:0.85; font-size:0.9rem;
-                  margin:0 0 1.4rem 0;">
-            🛡️ Atestado emitido e registrado na plataforma AmorSaúde
+                  margin:0 0 1.4rem 0; display:flex; align-items:center; justify-content:center; gap:0.3rem;">
+            {icone} Atestado emitido e registrado na plataforma AmorSaúde
         </p>
         """,
         unsafe_allow_html=True,
@@ -331,12 +387,31 @@ def _campo_dado(rotulo: str, valor: str) -> None:
     )
 
 
+def _campo_cid_protegido() -> None:
+    """Campo especial para o CID — exibe ícone de cadeado em vez do valor real."""
+    icone = _svg("lock", 15, COR_TEXTO, "opacity:0.55; margin-right:0.35rem")
+    st.markdown(
+        f"""
+        <div style="margin-bottom:1rem;">
+            <div style="color:{COR_TEXTO}; opacity:0.7; font-size:0.82rem; margin-bottom:0.15rem;">Diagnóstico (CID)</div>
+            <div style="color:{COR_TEXTO}; font-size:1.05rem; font-weight:600; display:flex; align-items:center;">
+                {icone}<span style="opacity:0.7;">Protegido por sigilo médico</span>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 def _bloco_como_funciona() -> None:
+    icone = _svg("info", 14, COR_PRIMARIA, "margin-right:0.4rem; flex-shrink:0")
     st.markdown(
         f"""
         <div style="background-color:{COR_BRANCO}; border:1px solid {COR_BORDA}; border-radius:12px;
                     padding:1rem 1.2rem; margin-top:1rem; font-size:0.85rem; color:{COR_TEXTO};">
-            <strong>🔎 Como funciona esta verificação</strong><br/><br/>
+            <div style="display:flex; align-items:center; font-weight:700; margin-bottom:0.5rem;">
+                {icone} Como funciona esta verificação
+            </div>
             A autenticidade deste atestado é confirmada diretamente na fonte — a base de dados da
             plataforma AmorSaúde — a cada consulta feita por este link ou QR Code. Nenhum dado de quem
             realiza esta consulta é coletado ou armazenado.
@@ -348,12 +423,14 @@ def _bloco_como_funciona() -> None:
 
 def _botao_imprimir() -> None:
     """Botão que abre a caixa de impressão do navegador para gerar um comprovante limpo."""
+    svg_printer = _svg("printer", 15, COR_PRIMARIA, "margin-right:0.4rem; vertical-align:middle")
     html_conteudo = f"""
     <button id="btn-imprimir-comprovante"
             style="background-color:{COR_BRANCO}; color:{COR_PRIMARIA}; border:1px solid {COR_PRIMARIA};
                    border-radius:8px; padding:0.55rem 1rem; cursor:pointer; font-size:0.88rem;
-                   font-weight:600; width:100%; font-family:sans-serif;">
-        🖨️ Imprimir comprovante
+                   font-weight:600; width:100%; font-family:sans-serif;
+                   display:flex; align-items:center; justify-content:center; gap:0.3rem;">
+        {svg_printer} Imprimir comprovante
     </button>
     <script>
         document.getElementById("btn-imprimir-comprovante").addEventListener("click", function() {{
@@ -362,18 +439,6 @@ def _botao_imprimir() -> None:
     </script>
     """
     components.html(html_conteudo, height=48)
-
-
-def _rodape() -> None:
-    st.markdown(
-        f"""
-        <div style="text-align:center; color:{COR_TEXTO}; opacity:0.6;
-                    font-size:0.8rem; padding:1.5rem 0 0.5rem 0;">
-            AmorSaúde — Validador de Atestados
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
 
 
 def _botao_copiar_link(url: str, chave: str) -> None:
@@ -391,13 +456,20 @@ def _botao_copiar_link(url: str, chave: str) -> None:
     # getAttribute, eliminando qualquer risco de payload quebrar a tag <script>.
     id_seguro = "btn-copiar-" + hashlib.sha256(chave.encode()).hexdigest()[:16]
     url_escapada = html.escape(url, quote=True)
+
+    svg_clipboard = _svg("clipboard", 14, COR_PRIMARIA)
+    # O svg é armazenado como atributo HTML (html.escape escapa < > " para entidades).
+    # getAttribute() devolve o valor decodificado; innerHTML re-interpreta as tags — funciona.
+    svg_default_escaped = html.escape(svg_clipboard + "&nbsp;Copiar link", quote=True)
+
     html_conteudo = f"""
-    <button id="{id_seguro}" data-url="{url_escapada}"
+    <button id="{id_seguro}" data-url="{url_escapada}" data-default="{svg_default_escaped}"
             style="background-color:{COR_BRANCO}; color:{COR_PRIMARIA};
                    border:1px solid {COR_PRIMARIA}; border-radius:6px;
                    padding:0.42rem 0.6rem; cursor:pointer; font-size:0.82rem;
-                   width:100%; font-family:sans-serif;">
-        📋 Copiar link
+                   width:100%; font-family:sans-serif;
+                   display:flex; align-items:center; justify-content:center; gap:0.3rem;">
+        {svg_clipboard}&nbsp;Copiar link
     </button>
     <script>
         (function() {{
@@ -405,8 +477,10 @@ def _botao_copiar_link(url: str, chave: str) -> None:
             btn.addEventListener("click", function() {{
                 var url = btn.getAttribute("data-url");
                 navigator.clipboard.writeText(url);
-                btn.innerText = "✅ Copiado!";
-                setTimeout(function() {{ btn.innerText = "📋 Copiar link"; }}, 1500);
+                btn.innerHTML = "&#10003;&nbsp;Copiado!";
+                setTimeout(function() {{
+                    btn.innerHTML = btn.getAttribute("data-default");
+                }}, 1500);
             }});
         }})();
     </script>
@@ -429,7 +503,7 @@ def _secao_token_api(usuario_alvo: dict, quem_gerencia: str) -> None:
     tem_token = bool(usuario_alvo.get("api_token_hash"))
     token_recem_gerado = st.session_state.get(chave_token_novo)
 
-    with st.expander(f"🔑 Token de API — {usuario_alvo['nome']}", expanded=bool(token_recem_gerado)):
+    with st.expander(f"Token de API — {usuario_alvo['nome']}", expanded=bool(token_recem_gerado)):
         st.markdown(
             "O token de API identifica este médico perante o endpoint de registro "
             "automático de atestados (ver seção **API / Integrações**). Trate-o como "
@@ -438,9 +512,8 @@ def _secao_token_api(usuario_alvo: dict, quem_gerencia: str) -> None:
 
         if token_recem_gerado:
             st.warning(
-                "⚠️ Copie o token agora — por segurança, ele não será exibido novamente. "
+                "Copie o token agora — por segurança, ele não será exibido novamente. "
                 "Ao gerar um novo token, este deixa de funcionar.",
-                icon="⚠️",
             )
             st.code(token_recem_gerado, language=None)
             if st.button("Já copiei, ocultar", key=f"ocultar_{chave_token_novo}", type="secondary"):
@@ -457,7 +530,7 @@ def _secao_token_api(usuario_alvo: dict, quem_gerencia: str) -> None:
         if not token_recem_gerado:
             col_gerar, col_revogar = st.columns(2)
             with col_gerar:
-                rotulo = "🔄 Gerar novo token" if tem_token else "➕ Gerar token de API"
+                rotulo = "Gerar novo token" if tem_token else "Gerar token de API"
                 if st.button(rotulo, key=chave_gerar, use_container_width=True, type="primary"):
                     novo_token = gerar_token()
                     salvar_token_api(usuario_alvo["id"], hash_token(novo_token), novo_token[-4:])
@@ -465,12 +538,12 @@ def _secao_token_api(usuario_alvo: dict, quem_gerencia: str) -> None:
                     st.rerun()
             with col_revogar:
                 if tem_token:
-                    if st.button("🚫 Revogar token", key=f"revogar_btn_{chave_confirmar_revogar}", use_container_width=True, type="secondary"):
+                    if st.button("Revogar token", key=f"revogar_btn_{chave_confirmar_revogar}", use_container_width=True, type="secondary"):
                         st.session_state[chave_confirmar_revogar] = True
                         st.rerun()
 
         if st.session_state.get(chave_confirmar_revogar):
-            st.warning("Tem certeza que deseja revogar este token? Chamadas de API feitas com ele passam a ser recusadas imediatamente.", icon="⚠️")
+            st.warning("Tem certeza que deseja revogar este token? Chamadas de API feitas com ele passam a ser recusadas imediatamente.")
             col_sim, col_nao = st.columns(2)
             with col_sim:
                 if st.button("Sim, revogar", key=f"sim_{chave_confirmar_revogar}", use_container_width=True, type="primary"):
@@ -486,7 +559,7 @@ def _secao_token_api(usuario_alvo: dict, quem_gerencia: str) -> None:
 
 def _secao_api_integracoes() -> None:
     """Explicação em português simples de como usar a API de registro programático."""
-    with st.expander("🔌 API / Integrações"):
+    with st.expander("API / Integrações"):
         endereco_registro = f"{_url_base()}atestados"
         endereco_qr = f"{_url_base()}atestados/{{codigo}}/qrcode.png"
         st.markdown(
@@ -494,7 +567,7 @@ def _secao_api_integracoes() -> None:
 Além do formulário acima, é possível registrar atestados **automaticamente**, de um
 sistema externo (por exemplo, uma automação que preenche uma "ficha padrão" e
 gera um documento no Canva). Isso é feito chamando um endereço da API com o
-**token de API do médico** (gere um na seção "🔑 Token de API" acima).
+**token de API do médico** (gere um na seção "Token de API" acima).
 
 **1. Endereço para registrar um atestado**
 
@@ -543,7 +616,7 @@ vazou.
 
 ---
 
-### 🤖 Conectar diretamente na Claude (conversa faz o registro por você)
+### Conectar diretamente na Claude (conversa faz o registro por você)
 
 Além da API acima (para sistemas/automações), também é possível deixar a
 própria Claude registrar atestados durante uma conversa, sem nenhum código —
@@ -585,14 +658,14 @@ endereço acima**, sem token na URL; o login passa a ser feito na tela que a
 própria Claude abre.
 
 **Revogar o acesso do conector Claude:** como a autenticação agora usa login
-(e não mais o token de API), revogar o "🔑 Token de API" acima **não** afeta
+(e não mais o token de API), revogar o "Token de API" acima **não** afeta
 o conector MCP. Para desconectar todos os acessos já concedidos à Claude (por
 exemplo, se você suspeita que alguém mais teve acesso à sua conta), use o
 botão abaixo.
 
 ---
 
-### 🌐 Publicar o app (obrigatório para o conector MCP ficar sempre disponível)
+### Publicar o app (obrigatório para o conector MCP ficar sempre disponível)
 
 Enquanto o app estiver rodando apenas no **endereço de desenvolvimento**
 (o que aparece durante a edição no Replit), ele fica no ar apenas enquanto o
@@ -634,7 +707,7 @@ disponíveis o tempo todo, é preciso **publicar** o app.
             qtd_ativos = contar_oauth_access_tokens_ativos(usuario_atual["id"])
             if qtd_ativos:
                 st.caption(f"Conector Claude: {qtd_ativos} acesso(s) autorizado(s) e ainda válido(s).")
-                if st.button("🚫 Revogar acesso do conector Claude", key="revogar_oauth_mcp"):
+                if st.button("Revogar acesso do conector Claude", key="revogar_oauth_mcp"):
                     revogar_oauth_access_tokens(usuario_atual["id"])
                     st.success("Acesso revogado. Para usar a Claude novamente, será preciso autorizar o conector outra vez.")
                     st.rerun()
@@ -699,7 +772,7 @@ def tela_verificacao(codigo: str) -> None:
         with st.container(border=True):
             if atestado is None:
                 _selo_status(
-                    icone="⚠️",
+                    icone_svg=_svg("alert-triangle", 36, COR_AMBAR),
                     titulo="Atestado não encontrado",
                     cor=COR_AMBAR,
                     cor_fundo=COR_AMBAR_FUNDO,
@@ -718,7 +791,7 @@ def tela_verificacao(codigo: str) -> None:
                     # _selo_status escapa `subtitulo` internamente — não escapar aqui
                     # de novo, senão o texto apareceria com entidades HTML duplicadas.
                     _selo_status(
-                        icone="🚫",
+                        icone_svg=_svg("x-circle", 36, COR_SECUNDARIA),
                         titulo="Atestado Revogado — não é mais válido",
                         cor=COR_SECUNDARIA,
                         cor_fundo="#FBEAEA",
@@ -730,7 +803,7 @@ def tela_verificacao(codigo: str) -> None:
                     )
                 else:
                     _selo_status(
-                        icone="✅",
+                        icone_svg=_svg("check-circle", 36, COR_PRIMARIA),
                         titulo="Atestado Autêntico",
                         cor=COR_PRIMARIA,
                         cor_fundo=COR_FUNDO_CLARO,
@@ -751,7 +824,7 @@ def tela_verificacao(codigo: str) -> None:
                         _campo_dado("Data de emissão", atestado["data_emissao"])
                     with col2:
                         _campo_dado("Paciente", atestado["nome_paciente"])
-                        _campo_dado("Diagnóstico (CID)", "🔒 Protegido por sigilo médico")
+                        _campo_cid_protegido()
                         _campo_dado("Período de afastamento", _formatar_periodo(atestado))
 
                 _bloco_metadados_verificacao(codigo)
@@ -787,7 +860,7 @@ def tela_login() -> None:
                 unsafe_allow_html=True,
             )
 
-            with st.expander("🔑 Credenciais iniciais — protótipo (clique para ver)", expanded=True):
+            with st.expander("Credenciais iniciais — protótipo (clique para ver)", expanded=True):
                 st.markdown(
                     f"**Administrador inicial** — usuário: `{ADMIN_INICIAL['usuario']}` / "
                     f"senha: `{ADMIN_INICIAL['senha']}` — use para criar e gerenciar contas de médico."
@@ -858,7 +931,12 @@ def tela_admin() -> None:
             del st.session_state["usuario"]
             st.rerun()
 
-    st.markdown(f'<h3 style="color:{COR_PRIMARIA}; margin-top:0;">👩‍⚕️ Cadastrar médico</h3>', unsafe_allow_html=True)
+    icone_cadastrar = _svg("user-plus", 18, COR_PRIMARIA, "margin-right:0.45rem; vertical-align:middle")
+    st.markdown(
+        f'<h3 style="color:{COR_PRIMARIA}; margin-top:0; display:flex; align-items:center;">'
+        f'{icone_cadastrar} Cadastrar médico</h3>',
+        unsafe_allow_html=True,
+    )
 
     with st.form("form_criar_medico", clear_on_submit=True):
         col_a, col_b = st.columns(2)
@@ -873,7 +951,7 @@ def tela_admin() -> None:
             type="password",
             help="O médico poderá usar essa senha no primeiro acesso. A senha é guardada com hash, nunca em texto puro.",
         )
-        criar = st.form_submit_button("➕ Criar conta de médico", use_container_width=True, type="primary")
+        criar = st.form_submit_button("Criar conta de médico", use_container_width=True, type="primary")
 
     if criar:
         erros = []
@@ -899,7 +977,7 @@ def tela_admin() -> None:
                     crm=crm_medico.strip(),
                     especialidade=especialidade_medico.strip() or None,
                 )
-                st.success(f"✅ Conta criada para {nome_medico.strip()}.")
+                st.success(f"Conta criada para {nome_medico.strip()}.")
                 st.rerun()
             except sqlite3.IntegrityError:
                 st.error("Esse nome de usuário já está em uso. Escolha outro.")
@@ -907,7 +985,12 @@ def tela_admin() -> None:
     st.write("")
     st.divider()
 
-    st.markdown(f'<h3 style="color:{COR_PRIMARIA};">📋 Médicos cadastrados</h3>', unsafe_allow_html=True)
+    icone_lista = _svg("list", 18, COR_PRIMARIA, "margin-right:0.45rem; vertical-align:middle")
+    st.markdown(
+        f'<h3 style="color:{COR_PRIMARIA}; display:flex; align-items:center;">'
+        f'{icone_lista} Médicos cadastrados</h3>',
+        unsafe_allow_html=True,
+    )
 
     medicos = listar_medicos()
     if not medicos:
@@ -968,7 +1051,7 @@ def tela_admin() -> None:
                         else:
                             redefinir_senha_usuario(m["id"], gerar_hash_senha(nova_senha))
                             st.session_state.pop(chave_reset, None)
-                            st.success("✅ Senha redefinida com sucesso.")
+                            st.success("Senha redefinida com sucesso.")
                             st.rerun()
                     if cancelar:
                         st.session_state.pop(chave_reset, None)
@@ -1021,7 +1104,11 @@ def tela_dashboard() -> None:
 
     erro_revogacao = st.session_state.pop("erro_revogacao", None)
     if erro_revogacao:
-        _caixa_mensagem(erro_revogacao, cor_fundo=COR_SECUNDARIA, icone="⚠️")
+        _caixa_mensagem(
+            erro_revogacao,
+            cor_fundo=COR_SECUNDARIA,
+            icone=_svg("alert-triangle", 16, COR_BRANCO),
+        )
 
     # -----------------------------------------------------------------------
     # Dados-base para os cartões e o gráfico (apenas leitura, sem alterar a fonte)
@@ -1037,33 +1124,35 @@ def tela_dashboard() -> None:
     total_dias_afastamento = sum(a.get("dias_afastamento") or 0 for a in atestados)
     pacientes_distintos = len({a["nome_paciente"].strip().lower() for a in atestados})
 
-    def _cartao_resumo(icone: str, numero, rotulo: str) -> str:
+    def _cartao_resumo(icone_svg: str, numero, rotulo: str) -> str:
         return f"""
         <div style="background:{COR_BRANCO}; border-top:4px solid {COR_PRIMARIA};
                     border-radius:12px; padding:1.1rem 0.8rem; text-align:center;
                     box-shadow:0 2px 10px rgba(0,0,0,0.06); height:100%;">
-            <div style="font-size:1.4rem;">{icone}</div>
+            <div style="display:flex; justify-content:center; margin-bottom:0.35rem;">{icone_svg}</div>
             <div style="font-size:1.9rem; font-weight:800; color:{COR_PRIMARIA}; line-height:1.2;">{numero}</div>
             <div style="color:{COR_TEXTO}; font-size:0.8rem; margin-top:0.15rem;">{rotulo}</div>
         </div>
         """
 
+    icone_visao = _svg("bar-chart", 18, COR_PRIMARIA, "margin-right:0.45rem; vertical-align:middle")
     st.markdown(
-        f'<h3 style="color:{COR_PRIMARIA}; margin-top:0.5rem;">📊 Visão geral</h3>',
+        f'<h3 style="color:{COR_PRIMARIA}; margin-top:0.5rem; display:flex; align-items:center;">'
+        f'{icone_visao} Visão geral</h3>',
         unsafe_allow_html=True,
     )
 
     col_r1, col_r2, col_r3, col_r4, col_r5 = st.columns(5)
     with col_r1:
-        st.markdown(_cartao_resumo("📄", total, "Total de Atestados"), unsafe_allow_html=True)
+        st.markdown(_cartao_resumo(_svg("file-text", 24, COR_PRIMARIA), total, "Total de Atestados"), unsafe_allow_html=True)
     with col_r2:
-        st.markdown(_cartao_resumo("📅", emitidos_este_mes, "Emitidos este mês"), unsafe_allow_html=True)
+        st.markdown(_cartao_resumo(_svg("calendar", 24, COR_PRIMARIA), emitidos_este_mes, "Emitidos este mês"), unsafe_allow_html=True)
     with col_r3:
-        st.markdown(_cartao_resumo("☀️", emitidos_hoje, "Emitidos hoje"), unsafe_allow_html=True)
+        st.markdown(_cartao_resumo(_svg("sun", 24, COR_PRIMARIA), emitidos_hoje, "Emitidos hoje"), unsafe_allow_html=True)
     with col_r4:
-        st.markdown(_cartao_resumo("🛌", total_dias_afastamento, "Dias de afastamento concedidos"), unsafe_allow_html=True)
+        st.markdown(_cartao_resumo(_svg("bed", 24, COR_PRIMARIA), total_dias_afastamento, "Dias de afastamento concedidos"), unsafe_allow_html=True)
     with col_r5:
-        st.markdown(_cartao_resumo("👥", pacientes_distintos, "Pacientes distintos"), unsafe_allow_html=True)
+        st.markdown(_cartao_resumo(_svg("users", 24, COR_PRIMARIA), pacientes_distintos, "Pacientes distintos"), unsafe_allow_html=True)
 
     st.write("")
 
@@ -1089,7 +1178,12 @@ def tela_dashboard() -> None:
     # -----------------------------------------------------------------------
     # Seção: Emitir novo atestado
     # -----------------------------------------------------------------------
-    st.markdown(f'<h3 style="color:{COR_PRIMARIA};">📋 Emitir novo atestado</h3>', unsafe_allow_html=True)
+    icone_emitir = _svg("file-plus", 18, COR_PRIMARIA, "margin-right:0.45rem; vertical-align:middle")
+    st.markdown(
+        f'<h3 style="color:{COR_PRIMARIA}; display:flex; align-items:center;">'
+        f'{icone_emitir} Emitir novo atestado</h3>',
+        unsafe_allow_html=True,
+    )
 
     with st.form("form_atestado", clear_on_submit=True):
         nome_paciente = st.text_input(
@@ -1144,7 +1238,7 @@ def tela_dashboard() -> None:
             dias = None
 
         emitir = st.form_submit_button(
-            "✅ Emitir atestado e gerar QR Code", use_container_width=True, type="primary"
+            "Emitir atestado e gerar QR Code", use_container_width=True, type="primary"
         )
 
     # Processamento do formulário (fora do bloco with form)
@@ -1189,7 +1283,7 @@ def tela_dashboard() -> None:
             url_verificacao = f"{_url_base()}?codigo={codigo}"
             qr_bytes = gerar_qr(url_verificacao)
 
-            st.success("✅ Atestado emitido com sucesso!")
+            st.success("Atestado emitido com sucesso.")
 
             # Exibir QR Code e link
             with st.container(border=True):
@@ -1197,7 +1291,7 @@ def tela_dashboard() -> None:
                 with col_qr:
                     st.image(qr_bytes, caption="QR Code de verificação", width=220)
                     st.download_button(
-                        label="⬇️ Baixar QR Code (PNG)",
+                        label="Baixar QR Code (PNG)",
                         data=qr_bytes,
                         file_name=f"atestado_{codigo[:12]}.png",
                         mime="image/png",
@@ -1220,14 +1314,19 @@ def tela_dashboard() -> None:
     # -----------------------------------------------------------------------
     # Seção: Atestados emitidos
     # -----------------------------------------------------------------------
+    icone_lista = _svg("folder-open", 18, COR_PRIMARIA, "margin-right:0.45rem; vertical-align:middle")
     col_titulo_lista, col_export = st.columns([4, 1.4])
     with col_titulo_lista:
-        st.markdown(f'<h3 style="color:{COR_PRIMARIA};">📁 Atestados emitidos por você</h3>', unsafe_allow_html=True)
+        st.markdown(
+            f'<h3 style="color:{COR_PRIMARIA}; display:flex; align-items:center;">'
+            f'{icone_lista} Atestados emitidos por você</h3>',
+            unsafe_allow_html=True,
+        )
     with col_export:
         if atestados:
             st.write("")
             st.download_button(
-                "⬇️ Exportar CSV",
+                "Exportar CSV",
                 data=_gerar_csv(atestados),
                 file_name=f"atestados_{medico['crm'].replace(' ', '_')}.csv",
                 mime="text/csv",
@@ -1236,7 +1335,7 @@ def tela_dashboard() -> None:
             )
 
     busca = st.text_input(
-        "🔍 Buscar por nome do paciente",
+        "Buscar por nome do paciente",
         placeholder="Digite o nome do paciente para filtrar…",
     )
 
@@ -1292,25 +1391,25 @@ def tela_dashboard() -> None:
                 if status_atestado == "revogado":
                     col_btn1, col_btn2 = st.columns(2)
                     with col_btn1:
-                        rotulo_qr = "Ocultar QR" if st.session_state.get(chave_toggle) else "🔳 Ver QR"
+                        rotulo_qr = "Ocultar QR" if st.session_state.get(chave_toggle) else "Ver QR"
                         if st.button(rotulo_qr, key=f"btn_qr_{codigo_atestado}", use_container_width=True, type="secondary"):
                             st.session_state[chave_toggle] = not st.session_state.get(chave_toggle, False)
                     with col_btn2:
                         _botao_copiar_link(url, chave=codigo_atestado)
+                    icone_ban = _svg("ban", 13, COR_SECUNDARIA, "margin-right:0.3rem; vertical-align:middle")
                     st.markdown(
                         f'<p style="color:{COR_SECUNDARIA}; font-size:0.82rem; font-weight:600; margin-top:0.5rem;">'
-                        f'🚫 Revogado em {html.escape(str(a.get("revogado_em") or ""))}</p>',
+                        f'{icone_ban} Revogado em {html.escape(str(a.get("revogado_em") or ""))}</p>',
                         unsafe_allow_html=True,
                     )
                 elif st.session_state.get(chave_confirmacao):
                     st.warning(
-                        "⚠️ Tem certeza que deseja revogar este atestado? Esta ação não pode ser desfeita.",
-                        icon="⚠️",
+                        "Tem certeza que deseja revogar este atestado? Esta ação não pode ser desfeita.",
                     )
                     col_conf1, col_conf2 = st.columns(2)
                     with col_conf1:
                         if st.button(
-                            "✅ Sim, revogar atestado",
+                            "Sim, revogar atestado",
                             key=f"confirmar_sim_{codigo_atestado}",
                             use_container_width=True,
                             type="primary",
@@ -1335,14 +1434,14 @@ def tela_dashboard() -> None:
                 else:
                     col_btn1, col_btn2, col_btn3 = st.columns(3)
                     with col_btn1:
-                        rotulo_qr = "Ocultar QR" if st.session_state.get(chave_toggle) else "🔳 Ver QR"
+                        rotulo_qr = "Ocultar QR" if st.session_state.get(chave_toggle) else "Ver QR"
                         if st.button(rotulo_qr, key=f"btn_qr_{codigo_atestado}", use_container_width=True, type="secondary"):
                             st.session_state[chave_toggle] = not st.session_state.get(chave_toggle, False)
                     with col_btn2:
                         _botao_copiar_link(url, chave=codigo_atestado)
                     with col_btn3:
                         if st.button(
-                            "🚫 Revogar atestado",
+                            "Revogar atestado",
                             key=f"revogar_{codigo_atestado}",
                             use_container_width=True,
                             type="primary",
@@ -1358,11 +1457,29 @@ def tela_dashboard() -> None:
 
     st.write("")
     st.divider()
-    st.markdown(f'<h3 style="color:{COR_PRIMARIA};">🔌 Registro automático (API)</h3>', unsafe_allow_html=True)
+
+    icone_api = _svg("plug", 18, COR_PRIMARIA, "margin-right:0.45rem; vertical-align:middle")
+    st.markdown(
+        f'<h3 style="color:{COR_PRIMARIA}; display:flex; align-items:center;">'
+        f'{icone_api} Registro automático (API)</h3>',
+        unsafe_allow_html=True,
+    )
     _secao_token_api(conta_atual, quem_gerencia="medico")
     _secao_api_integracoes()
 
     _rodape()
+
+
+def _rodape() -> None:
+    st.markdown(
+        f"""
+        <div style="text-align:center; color:{COR_TEXTO}; opacity:0.6;
+                    font-size:0.8rem; padding:1.5rem 0 0.5rem 0;">
+            AmorSaúde — Validador de Atestados
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 # ---------------------------------------------------------------------------
