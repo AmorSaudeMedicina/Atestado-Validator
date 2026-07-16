@@ -206,16 +206,6 @@ def _injetar_estilo() -> None:
         }}
 
         /* ─────────────────────────────────────────────
-           CARDS (st.container border=True)
-           ───────────────────────────────────────────── */
-        [data-testid="stVerticalBlockBorderWrapper"] {{
-            border-radius: 12px !important;
-            box-shadow: 0 1px 6px rgba(95,194,212,0.10), 0 4px 16px rgba(0,0,0,0.04) !important;
-            background-color: {COR_BRANCO} !important;
-            border-color: {COR_BORDA} !important;
-        }}
-
-        /* ─────────────────────────────────────────────
            FORMULÁRIOS
            ───────────────────────────────────────────── */
         [data-testid="stForm"] {{
@@ -266,7 +256,46 @@ def _injetar_estilo() -> None:
         }}
 
         /* ─────────────────────────────────────────────
-           BOTÕES — peso tipográfico aumentado
+           MICROINTERAÇÕES — transições globais
+           ───────────────────────────────────────────── */
+        button, input, textarea, select,
+        [data-testid="stVerticalBlockBorderWrapper"],
+        [data-testid="stExpander"] {{
+            transition: all 160ms cubic-bezier(0.25, 0.46, 0.45, 0.94) !important;
+        }}
+        /* Inputs: só border-color + shadow para não interferir no layout */
+        [data-testid="stTextInput"] input,
+        [data-testid="stNumberInput"] input,
+        [data-testid="stDateInput"] input,
+        [data-testid="stTextArea"] textarea {{
+            transition: border-color 160ms ease, box-shadow 160ms ease !important;
+        }}
+
+        /* ─────────────────────────────────────────────
+           CARDS — hover com "lift" suave
+           ───────────────────────────────────────────── */
+        [data-testid="stVerticalBlockBorderWrapper"] {{
+            border-radius: 12px !important;
+            box-shadow: 0 1px 4px rgba(95,194,212,0.08), 0 2px 12px rgba(0,0,0,0.04) !important;
+            background-color: {COR_BRANCO} !important;
+            border-color: {COR_BORDA} !important;
+            will-change: transform, box-shadow;
+        }}
+        [data-testid="stVerticalBlockBorderWrapper"]:hover {{
+            box-shadow: 0 4px 16px rgba(95,194,212,0.16), 0 8px 24px rgba(0,0,0,0.07) !important;
+            transform: translateY(-2px) !important;
+            border-color: rgba(95,194,212,0.4) !important;
+        }}
+
+        /* ─────────────────────────────────────────────
+           EXPANDER — hover suave no summary
+           ───────────────────────────────────────────── */
+        [data-testid="stExpander"] summary:hover {{
+            opacity: 0.75 !important;
+        }}
+
+        /* ─────────────────────────────────────────────
+           BOTÕES — peso tipográfico + microinterações
            ───────────────────────────────────────────── */
         button[kind="primary"] {{
             background-color: {COR_CTA} !important;
@@ -277,10 +306,22 @@ def _injetar_estilo() -> None:
             font-size: 0.9375rem !important;
             border-radius: 8px !important;
             letter-spacing: 0.01em !important;
+            will-change: transform, box-shadow;
         }}
         button[kind="primary"]:hover {{
             background-color: #b8241c !important;
             border-color: #b8241c !important;
+            box-shadow: 0 4px 12px rgba(213,58,49,0.30) !important;
+            transform: translateY(-1px) !important;
+        }}
+        button[kind="primary"]:active {{
+            transform: translateY(0px) !important;
+            box-shadow: 0 1px 4px rgba(213,58,49,0.20) !important;
+        }}
+        button[kind="primary"]:focus-visible {{
+            outline: 2px solid {COR_CTA} !important;
+            outline-offset: 2px !important;
+            box-shadow: 0 0 0 4px rgba(213,58,49,0.20) !important;
         }}
         button[kind="secondary"] {{
             background-color: {COR_BRANCO} !important;
@@ -290,10 +331,43 @@ def _injetar_estilo() -> None:
             font-weight: 600 !important;
             font-size: 0.9375rem !important;
             border-radius: 8px !important;
+            will-change: transform, box-shadow;
         }}
         button[kind="secondary"]:hover {{
-            border-color: {COR_CTA} !important;
-            color: {COR_CTA} !important;
+            background-color: {COR_FUNDO_CLARO} !important;
+            border-color: #3fa8bc !important;
+            color: #3a96a8 !important;
+            box-shadow: 0 2px 8px rgba(95,194,212,0.18) !important;
+            transform: translateY(-1px) !important;
+        }}
+        button[kind="secondary"]:active {{
+            transform: translateY(0px) !important;
+            box-shadow: none !important;
+        }}
+        button[kind="secondary"]:focus-visible {{
+            outline: 2px solid {COR_PRIMARIA} !important;
+            outline-offset: 2px !important;
+            box-shadow: 0 0 0 4px rgba(95,194,212,0.22) !important;
+        }}
+
+        /* Botões HTML customizados (imprimir, copiar link) */
+        button.amorsaude-btn-outline {{
+            transition: background-color 160ms ease, box-shadow 160ms ease,
+                        transform 160ms ease, border-color 160ms ease !important;
+            will-change: transform, box-shadow;
+        }}
+        button.amorsaude-btn-outline:hover {{
+            background-color: {COR_FUNDO_CLARO} !important;
+            box-shadow: 0 2px 8px rgba(95,194,212,0.18) !important;
+            transform: translateY(-1px) !important;
+        }}
+        button.amorsaude-btn-outline:active {{
+            transform: translateY(0px) !important;
+            box-shadow: none !important;
+        }}
+        button.amorsaude-btn-outline:focus-visible {{
+            outline: 2px solid {COR_PRIMARIA} !important;
+            outline-offset: 2px !important;
         }}
 
         /* ─────────────────────────────────────────────
@@ -541,7 +615,7 @@ def _botao_imprimir() -> None:
     """Botão que abre a caixa de impressão do navegador para gerar um comprovante limpo."""
     svg_printer = _svg("printer", 15, COR_PRIMARIA, "margin-right:0.4rem; vertical-align:middle")
     html_conteudo = f"""
-    <button id="btn-imprimir-comprovante"
+    <button id="btn-imprimir-comprovante" class="amorsaude-btn-outline"
             style="background-color:{COR_BRANCO}; color:{COR_PRIMARIA}; border:1.5px solid {COR_PRIMARIA};
                    border-radius:8px; padding:0.5rem 1rem; cursor:pointer; font-size:0.875rem;
                    font-weight:700; width:100%; font-family:'Nunito Sans',sans-serif;
@@ -580,7 +654,7 @@ def _botao_copiar_link(url: str, chave: str) -> None:
     svg_default_escaped = html.escape(svg_clipboard + "&nbsp;Copiar link", quote=True)
 
     html_conteudo = f"""
-    <button id="{id_seguro}" data-url="{url_escapada}" data-default="{svg_default_escaped}"
+    <button id="{id_seguro}" class="amorsaude-btn-outline" data-url="{url_escapada}" data-default="{svg_default_escaped}"
             style="background-color:{COR_BRANCO}; color:{COR_PRIMARIA};
                    border:1.5px solid {COR_PRIMARIA}; border-radius:8px;
                    padding:0.5rem 0.75rem; cursor:pointer; font-size:0.8125rem;
