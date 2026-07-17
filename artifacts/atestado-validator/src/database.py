@@ -5,13 +5,20 @@ Guarda os atestados emitidos de forma persistente entre sessões.
 Banco criado automaticamente em data/atestados.db na primeira execução.
 """
 
+import os
 import sqlite3
 from pathlib import Path
 from typing import Optional
 
-# Caminho absoluto baseado na localização deste arquivo, sobe um nível até a raiz do projeto
-_DB_DIR = Path(__file__).resolve().parent.parent / "data"
-_DB_PATH = _DB_DIR / "atestados.db"
+# Caminho do banco de dados, configurável para deploys com disco persistente
+# (ex.: um Volume do Railway) sem precisar alterar código:
+#   - DATABASE_PATH: caminho completo do arquivo .db (tem prioridade).
+#   - DATA_DIR: diretório onde o arquivo "atestados.db" deve ficar.
+# Sem nenhuma das duas, cai no caminho local de desenvolvimento de sempre
+# (baseado na localização deste arquivo, subindo um nível até a raiz do projeto).
+_DB_DIR_PADRAO = Path(__file__).resolve().parent.parent / "data"
+_DB_DIR = Path(os.environ["DATA_DIR"]) if os.environ.get("DATA_DIR") else _DB_DIR_PADRAO
+_DB_PATH = Path(os.environ["DATABASE_PATH"]) if os.environ.get("DATABASE_PATH") else (_DB_DIR / "atestados.db")
 
 _CREATE_TABLE = """
 CREATE TABLE IF NOT EXISTS atestados (
@@ -122,7 +129,7 @@ def _conectar() -> sqlite3.Connection:
     WAL mode permite leituras simultâneas sem bloquear escritas.
     timeout=10 evita erros imediatos de 'database is locked' sob carga leve.
     """
-    _DB_DIR.mkdir(parents=True, exist_ok=True)
+    _DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(_DB_PATH), timeout=10)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")

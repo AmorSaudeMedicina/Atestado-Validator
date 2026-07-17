@@ -1,0 +1,17 @@
+# Reduz o contexto de build enviado ao Docker — nada aqui é necessário para
+# rodar artifacts/atestado-validator/server.py em produção.
+.git
+node_modules
+pnpm-lock.yaml
+attached_assets
+lib
+artifacts/atestado
+artifacts/api-server
+artifacts/mockup-sandbox
+
+# Nunca embutir na imagem: ambiente virtual local, cache de bytecode, e o
+# banco SQLite de desenvolvimento (em produção ele vive no Volume montado).
+**/.venv
+**/__pycache__
+**/*.pyc
+artifacts/atestado-validator/data/*.db

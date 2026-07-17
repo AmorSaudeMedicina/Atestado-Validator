@@ -22,6 +22,7 @@ from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 from streamlit.web.server.starlette import App
 
+from src.auth import semear_usuarios_iniciais
 from src.database import init_db
 from src.api import obter_qr_code, registrar_atestado
 from src.mcp_server import mcp_endpoint
@@ -77,6 +78,13 @@ logging.getLogger("uvicorn.access").addFilter(_RedigirSegredosNosLogsDeAcesso())
 # Streamlit já ter carregado app.py primeiro, já que a Claude chama estas
 # rotas diretamente, sem nunca abrir a página normal do app.
 init_db()
+
+# Cria o administrador inicial e os médicos de teste já na subida do
+# processo (não apenas quando alguém abre a UI pela primeira vez) — em um
+# banco novo (ex.: Volume vazio no primeiro deploy do Railway) isso garante
+# que sempre existe uma conta para logar. Idempotente: se o banco já tem
+# alguma conta (mesmo em reinícios seguintes), não faz nada.
+semear_usuarios_iniciais()
 
 _SCRIPT_PATH = str(Path(__file__).resolve().parent / "app.py")
 

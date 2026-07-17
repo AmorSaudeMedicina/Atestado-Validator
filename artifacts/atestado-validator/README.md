@@ -96,9 +96,26 @@ atestado-validator/
 ## Como executar (Replit)
 
 O app é iniciado automaticamente pelo workflow configurado.  
-Para rodar manualmente:
+Para rodar manualmente (só a interface Streamlit, sem API/MCP):
 
 ```bash
 cd artifacts/atestado-validator
 streamlit run app.py --server.port 5000
 ```
+
+## Como executar em produção (Railway)
+
+Em produção, o ponto de entrada é `server.py`, não `app.py` — ele sobe a
+interface Streamlit e as rotas HTTP (API REST, imagem do QR, MCP/OAuth) no
+MESMO processo e MESMA porta pública:
+
+```bash
+cd artifacts/atestado-validator
+python server.py
+```
+
+`server.py` lê a porta da variável de ambiente `PORT` (padrão 5000 se não
+definida) e escuta em `0.0.0.0`. O deploy no Railway usa o `Dockerfile` na
+raiz do repositório — ver `railway.toml` e a seção "Deploy no Railway" no
+`CLAUDE.md`/mensagem do assistente para o caminho do volume persistente do
+banco SQLite (`DATA_DIR`).

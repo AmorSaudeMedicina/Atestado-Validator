@@ -47,3 +47,12 @@ Thumbs.db
 # Replit
 .cache/
 .local/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Banco SQLite local do validador de atestados — em produção (Railway) ele
+# vive no Volume persistente, nunca commitado junto com o código.
+artifacts/atestado-validator/data/*.db
