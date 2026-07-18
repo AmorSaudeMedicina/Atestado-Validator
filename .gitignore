@@ -53,9 +53,12 @@ __pycache__/
 *.pyc
 .venv/
 
-# Banco SQLite local do validador de atestados — em produção (Railway) ele
-# vive no Volume persistente, nunca commitado junto com o código.
+# Banco SQLite local do validador de atestados (inclui os arquivos auxiliares
+# -wal/-shm do modo WAL) — em produção (Railway) ele vive no Volume
+# persistente, nunca commitado junto com o código.
 artifacts/atestado-validator/data/*.db
+artifacts/atestado-validator/data/*.db-wal
+artifacts/atestado-validator/data/*.db-shm
 
 # Grafo de conhecimento do Graphify — gerado localmente por máquina/sessão
 # (graph.json, GRAPH_REPORT.md, graph.html, vault do Obsidian). Reconstrução

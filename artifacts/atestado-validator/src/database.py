@@ -10,6 +10,8 @@ import sqlite3
 from pathlib import Path
 from typing import Optional
 
+from src.crypto import criptografar, descriptografar, validar_chave_na_subida
+
 # Caminho do banco de dados, configurável para deploys com disco persistente
 # (ex.: um Volume do Railway) sem precisar alterar código:
 #   - DATABASE_PATH: caminho completo do arquivo .db (tem prioridade).
@@ -45,6 +47,15 @@ CREATE TABLE IF NOT EXISTS atestados (
 _MIGRACOES_COLUNAS = [
     ("status", "TEXT NOT NULL DEFAULT 'ativo'"),
     ("revogado_em", "TEXT"),
+    # Criptografia em repouso (LGPD/segurança, parte 2): marca se nome_paciente
+    # e cid desta linha já estão cifrados (1) ou ainda em texto puro (0).
+    # Linhas NOVAS gravadas por salvar_atestado() já entram com cifrado=1;
+    # linhas existentes de antes desta migração entram com 0 (valor padrão
+    # do ALTER TABLE) e são cifradas uma única vez por
+    # `migrar_atestados_para_cifrado()`, chamada em init_db(). Nunca é lido
+    # como texto puro por engano: buscar_atestado_por_codigo() e
+    # listar_atestados_por_crm() só descriptografam quando cifrado=1.
+    ("cifrado", "INTEGER NOT NULL DEFAULT 0"),
 ]
 
 _CREATE_USUARIOS = """
@@ -151,7 +162,13 @@ def init_db() -> None:
     A migração usa ALTER TABLE ADD COLUMN — nunca DROP/CREATE — então atestados
     já gravados permanecem intactos e simplesmente herdam os valores padrão
     das colunas novas (status='ativo', revogado_em=NULL).
+
+    Fail-closed: valida ENCRYPTION_KEY ANTES de qualquer outra coisa — se a
+    chave estiver ausente/inválida, o processo falha aqui, na subida, e nunca
+    chega a servir uma única requisição sem criptografia configurada.
     """
+    validar_chave_na_subida()
+
     with _conectar() as conn:
         conn.execute(_CREATE_TABLE)
         colunas_existentes = {
@@ -171,6 +188,8 @@ def init_db() -> None:
         conn.execute(_CREATE_OAUTH_AUTH_CODES)
         conn.execute(_CREATE_OAUTH_ACCESS_TOKENS)
         conn.commit()
+
+    migrar_atestados_para_cifrado()
 
 
 # ---------------------------------------------------------------------------
@@ -462,6 +481,30 @@ def revogar_oauth_access_tokens(usuario_id: int) -> int:
         return cursor.rowcount
 
 
+def migrar_atestados_para_cifrado() -> int:
+    """
+    Criptografa nome_paciente/cid de atestados gravados ANTES da criptografia
+    em repouso ter sido introduzida (linhas com cifrado=0), uma única vez.
+
+    Idempotente e seguro de chamar toda subida (é chamada por `init_db()`):
+    só processa linhas ainda com cifrado=0 — depois da primeira execução bem
+    sucedida vira um SELECT vazio, praticamente instantâneo. Nunca apaga nem
+    recria linha nenhuma, só faz UPDATE campo a campo; nenhum atestado é
+    perdido. Retorna quantas linhas foram migradas nesta chamada.
+    """
+    with _conectar() as conn:
+        linhas = conn.execute(
+            "SELECT id, nome_paciente, cid FROM atestados WHERE cifrado = 0"
+        ).fetchall()
+        for linha in linhas:
+            conn.execute(
+                "UPDATE atestados SET nome_paciente = ?, cid = ?, cifrado = 1 WHERE id = ?",
+                (criptografar(linha["nome_paciente"]), criptografar(linha["cid"]), linha["id"]),
+            )
+        conn.commit()
+    return len(linhas)
+
+
 def salvar_atestado(
     codigo: str,
     nome_medico: str,
@@ -473,36 +516,55 @@ def salvar_atestado(
     data_fim: Optional[str],
     dias_afastamento: Optional[int],
 ) -> None:
-    """Persiste um novo atestado no banco."""
+    """
+    Persiste um novo atestado no banco. `nome_paciente` e `cid` são gravados
+    criptografados (ver src/crypto.py) — nunca em texto puro.
+    """
     sql = """
         INSERT INTO atestados
             (codigo, nome_medico, crm, nome_paciente, cid,
-             data_emissao, data_inicio, data_fim, dias_afastamento)
-        VALUES (?,?,?,?,?,?,?,?,?)
+             data_emissao, data_inicio, data_fim, dias_afastamento, cifrado)
+        VALUES (?,?,?,?,?,?,?,?,?,1)
     """
     with _conectar() as conn:
         conn.execute(
             sql,
-            (codigo, nome_medico, crm, nome_paciente, cid,
+            (codigo, nome_medico, crm, criptografar(nome_paciente), criptografar(cid),
              data_emissao, data_inicio, data_fim, dias_afastamento),
         )
         conn.commit()
 
 
+def _descriptografar_atestado(linha: dict) -> dict:
+    """
+    Descriptografa nome_paciente/cid de uma linha da tabela `atestados` antes
+    de devolvê-la ao chamador — transparente para quem consome (dashboard,
+    API, MCP, página de verificação). Só descriptografa se `cifrado=1`; uma
+    linha ainda não migrada (cifrado=0, texto puro) é devolvida como está —
+    isso nunca deveria acontecer em uso normal (init_db() já migra tudo na
+    subida), mas evita quebrar/corromper dado se acontecer numa janela rara.
+    """
+    atestado = dict(linha)
+    if atestado.get("cifrado"):
+        atestado["nome_paciente"] = descriptografar(atestado["nome_paciente"])
+        atestado["cid"] = descriptografar(atestado["cid"])
+    return atestado
+
+
 def buscar_atestado_por_codigo(codigo: str) -> Optional[dict]:
-    """Retorna os dados do atestado ou None se não encontrado."""
+    """Retorna os dados do atestado (nome_paciente/cid já descriptografados) ou None se não encontrado."""
     sql = "SELECT * FROM atestados WHERE codigo = ?"
     with _conectar() as conn:
         row = conn.execute(sql, (codigo,)).fetchone()
-    return dict(row) if row else None
+    return _descriptografar_atestado(row) if row else None
 
 
 def listar_atestados_por_crm(crm: str) -> list[dict]:
-    """Retorna todos os atestados emitidos por um médico (mais recentes primeiro)."""
+    """Retorna todos os atestados emitidos por um médico (nome_paciente/cid já descriptografados), mais recentes primeiro."""
     sql = "SELECT * FROM atestados WHERE crm = ? ORDER BY id DESC"
     with _conectar() as conn:
         rows = conn.execute(sql, (crm,)).fetchall()
-    return [dict(r) for r in rows]
+    return [_descriptografar_atestado(r) for r in rows]
 
 
 def revogar_atestado(codigo: str, crm: str) -> bool:
