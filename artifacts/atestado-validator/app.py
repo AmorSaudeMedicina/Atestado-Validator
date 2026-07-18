@@ -18,13 +18,14 @@ import io
 import os
 import secrets
 import sqlite3
+import time
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
 import streamlit as st
 import streamlit.components.v1 as components
 
-from src.auth import ADMIN_INICIAL, MEDICOS_TESTE, autenticar, gerar_hash_senha, semear_usuarios_iniciais
+from src.auth import autenticar, esta_bloqueado, gerar_hash_senha, semear_usuarios_iniciais, validar_senha_forte
 from src.database import (
     buscar_atestado_por_codigo,
     buscar_usuario_por_login,
@@ -1186,46 +1187,92 @@ def tela_login() -> None:
                 unsafe_allow_html=True,
             )
 
-            with st.expander("Credenciais iniciais — protótipo (clique para ver)", expanded=True):
-                st.markdown(
-                    f"**Administrador inicial** — usuário: `{ADMIN_INICIAL['usuario']}` / "
-                    f"senha: `{ADMIN_INICIAL['senha']}` — use para criar e gerenciar contas de médico."
-                )
-                st.markdown("**Contas de médico para teste:**")
-                colunas = st.columns(len(MEDICOS_TESTE))
-                for col, m in zip(colunas, MEDICOS_TESTE):
-                    with col:
-                        st.markdown(
-                            f"**{m['nome']}**  \n"
-                            f"Usuário: `{m['usuario']}`  \n"
-                            f"Senha: `{m['senha']}`  \n"
-                            f"CRM: {m['crm']}"
-                        )
-                st.caption(
-                    "As senhas acima só existem em texto puro nesta nota — no banco de dados "
-                    "elas ficam sempre protegidas por hash."
-                )
-
             with st.form("form_login"):
-                usuario = st.text_input("Usuário", placeholder="ex.: drsilva")
+                usuario = st.text_input("Usuário", placeholder="Usuário")
                 senha = st.text_input("Senha", type="password")
                 entrar = st.form_submit_button(
                     "Entrar", use_container_width=True, type="primary"
                 )
 
             if entrar:
-                if not usuario or not senha:
+                usuario_normalizado = usuario.strip()
+                if not usuario_normalizado or not senha:
                     st.warning("Preencha usuário e senha.")
+                elif esta_bloqueado(usuario_normalizado):
+                    st.error(
+                        "Conta temporariamente bloqueada por excesso de tentativas incorretas. "
+                        "Tente novamente em alguns minutos."
+                    )
                 else:
-                    conta = autenticar(usuario.strip(), senha)
+                    conta = autenticar(usuario_normalizado, senha)
                     if conta:
                         st.session_state["usuario"] = conta
+                        st.session_state["_ultima_atividade"] = time.time()
                         st.rerun()
                     else:
-                        st.error(
-                            "Usuário ou senha inválidos, ou conta desativada. "
-                            "Verifique as credenciais iniciais acima."
-                        )
+                        st.error("Usuário ou senha inválidos, ou conta desativada.")
+
+    _rodape()
+
+
+# ---------------------------------------------------------------------------
+# TELA 2.5 — Troca de senha obrigatória (primeiro login)
+# ---------------------------------------------------------------------------
+
+def tela_trocar_senha_obrigatoria() -> None:
+    """
+    Intercepta o acesso de uma conta com `deve_trocar_senha=1` — hoje isso
+    acontece só com o admin inicial (ver `semear_usuarios_iniciais`), para
+    garantir que a senha gerada/definida na primeira subida do app nunca
+    continue em uso depois do primeiro acesso.
+    """
+    conta = st.session_state["usuario"]
+
+    col_esq, col_centro, col_dir = st.columns([1, 4, 1])
+    with col_centro:
+        with st.container(border=True):
+            st.markdown(
+                f'<div style="text-align:center; padding-top:0.5rem;">{_logo_html(64)}</div>',
+                unsafe_allow_html=True,
+            )
+            st.markdown(
+                f'<h2 style="text-align:center; color:{COR_PRIMARIA}; margin:0.75rem 0 0 0; '
+                f'font-size:1.5rem; font-weight:800; font-family:\'Nunito Sans\',sans-serif; '
+                f'letter-spacing:-0.01em;">Troque sua senha</h2>',
+                unsafe_allow_html=True,
+            )
+            st.markdown(
+                f'<p style="text-align:center; color:{COR_TEXTO}; opacity:0.72; '
+                f'font-size:0.9375rem; margin:0.25rem 0 1rem 0; '
+                f'font-family:\'Nunito Sans\',sans-serif;">'
+                f'Por segurança, defina uma nova senha antes de continuar.</p>',
+                unsafe_allow_html=True,
+            )
+
+            with st.form("form_trocar_senha_obrigatoria"):
+                nova_senha = st.text_input("Nova senha", type="password")
+                confirmar_senha = st.text_input("Confirme a nova senha", type="password")
+                salvar = st.form_submit_button(
+                    "Salvar nova senha", use_container_width=True, type="primary"
+                )
+
+            if salvar:
+                erro_senha = validar_senha_forte(nova_senha)
+                if erro_senha:
+                    st.error(erro_senha)
+                elif nova_senha != confirmar_senha:
+                    st.error("As senhas informadas não coincidem.")
+                else:
+                    redefinir_senha_usuario(conta["id"], gerar_hash_senha(nova_senha))
+                    conta_atualizada = dict(conta)
+                    conta_atualizada["deve_trocar_senha"] = 0
+                    st.session_state["usuario"] = conta_atualizada
+                    st.success("Senha atualizada. Redirecionando...")
+                    st.rerun()
+
+            if st.button("Sair", use_container_width=True, type="secondary"):
+                st.session_state.pop("usuario", None)
+                st.rerun()
 
     _rodape()
 
@@ -1288,8 +1335,9 @@ def tela_admin() -> None:
             erros.append("Informe o CRM (com UF).")
         if not usuario_medico.strip():
             erros.append("Informe um usuário de acesso.")
-        if not senha_inicial or len(senha_inicial) < 6:
-            erros.append("A senha inicial deve ter pelo menos 6 caracteres.")
+        erro_senha_inicial = validar_senha_forte(senha_inicial)
+        if erro_senha_inicial:
+            erros.append(erro_senha_inicial)
 
         if erros:
             for e in erros:
@@ -1379,8 +1427,9 @@ def tela_admin() -> None:
                         with col_canc:
                             cancelar = st.form_submit_button("Cancelar", use_container_width=True, type="secondary")
                     if confirmar:
-                        if not nova_senha or len(nova_senha) < 6:
-                            st.error("A nova senha deve ter pelo menos 6 caracteres.")
+                        erro_nova_senha = validar_senha_forte(nova_senha)
+                        if erro_nova_senha:
+                            st.error(erro_nova_senha)
                         else:
                             redefinir_senha_usuario(m["id"], gerar_hash_senha(nova_senha))
                             st.session_state.pop(chave_reset, None)
@@ -1834,13 +1883,30 @@ def _rodape() -> None:
 # Roteador principal
 # ---------------------------------------------------------------------------
 
+# Auto-logout por inatividade: cada tela autenticada atualiza
+# "_ultima_atividade" a cada interação (qualquer clique/submit dispara um
+# rerun do Streamlit); se o tempo desde a última interação passar do limite,
+# a sessão é encerrada na próxima interação do usuário. Não é um timer ativo
+# em segundo plano (o Streamlit não roda código enquanto a aba fica parada) —
+# na prática, expira "na próxima ação" após o tempo de inatividade, o que já
+# cobre o objetivo de não deixar uma sessão esquecida utilizável indefinidamente.
+_TIMEOUT_INATIVIDADE_SEGUNDOS = 30 * 60  # 30 minutos
+
 codigo_url = st.query_params.get("codigo")
 
 if codigo_url:
     tela_verificacao(str(codigo_url))
 elif "usuario" not in st.session_state:
     tela_login()
-elif st.session_state["usuario"]["perfil"] == "admin":
-    tela_admin()
+elif (time.time() - st.session_state.get("_ultima_atividade", time.time())) > _TIMEOUT_INATIVIDADE_SEGUNDOS:
+    st.session_state.clear()
+    st.warning("Sessão expirada por inatividade. Faça login novamente.")
+    tela_login()
 else:
-    tela_dashboard()
+    st.session_state["_ultima_atividade"] = time.time()
+    if st.session_state["usuario"].get("deve_trocar_senha"):
+        tela_trocar_senha_obrigatoria()
+    elif st.session_state["usuario"]["perfil"] == "admin":
+        tela_admin()
+    else:
+        tela_dashboard()

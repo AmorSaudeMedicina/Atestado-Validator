@@ -79,6 +79,13 @@ _MIGRACOES_COLUNAS_USUARIOS = [
     ("api_token_hash", "TEXT"),
     ("api_token_ultimos4", "TEXT"),
     ("api_token_criado_em", "TEXT"),
+    # Endurecimento de login (LGPD/segurança para produção):
+    # deve_trocar_senha força a troca no próximo login bem-sucedido (usado no
+    # seed do admin inicial); tentativas_login_falhas + bloqueado_ate
+    # implementam o bloqueio temporário por força bruta (ver src/auth.py).
+    ("deve_trocar_senha", "INTEGER NOT NULL DEFAULT 0"),
+    ("tentativas_login_falhas", "INTEGER NOT NULL DEFAULT 0"),
+    ("bloqueado_ate", "TEXT"),
 ]
 
 # ---------------------------------------------------------------------------
@@ -189,19 +196,26 @@ def criar_usuario(
     crm: Optional[str] = None,
     especialidade: Optional[str] = None,
     ativo: bool = True,
+    deve_trocar_senha: bool = False,
 ) -> None:
     """
     Cria uma nova conta. `perfil` deve ser 'admin' ou 'medico'.
+
+    `deve_trocar_senha=True` força a troca de senha no próximo login bem
+    sucedido dessa conta (usado no seed do administrador inicial).
 
     Levanta sqlite3.IntegrityError se `usuario` já existir — o chamador deve
     tratar esse caso (ex.: exibir "nome de usuário já em uso").
     """
     sql = """
-        INSERT INTO usuarios (usuario, senha_hash, nome, perfil, crm, especialidade, ativo)
-        VALUES (?,?,?,?,?,?,?)
+        INSERT INTO usuarios (usuario, senha_hash, nome, perfil, crm, especialidade, ativo, deve_trocar_senha)
+        VALUES (?,?,?,?,?,?,?,?)
     """
     with _conectar() as conn:
-        conn.execute(sql, (usuario, senha_hash, nome, perfil, crm, especialidade, int(ativo)))
+        conn.execute(
+            sql,
+            (usuario, senha_hash, nome, perfil, crm, especialidade, int(ativo), int(deve_trocar_senha)),
+        )
         conn.commit()
 
 
@@ -238,13 +252,60 @@ def definir_status_usuario(usuario_id: int, ativo: bool) -> bool:
         return cursor.rowcount > 0
 
 
-def redefinir_senha_usuario(usuario_id: int, novo_senha_hash: str) -> bool:
-    """Substitui o hash de senha de uma conta. Retorna True se alterou algum registro."""
-    sql = "UPDATE usuarios SET senha_hash = ? WHERE id = ?"
+def redefinir_senha_usuario(usuario_id: int, novo_senha_hash: str, deve_trocar_senha: bool = False) -> bool:
+    """
+    Substitui o hash de senha de uma conta e define se ela deve trocar a senha
+    de novo no próximo login (`deve_trocar_senha=True` — usado só no fluxo de
+    troca obrigatória; o padrão `False` cobre tanto o admin redefinindo a
+    senha de um médico quanto uma conta trocando a própria senha por vontade
+    própria). Retorna True se alterou algum registro.
+    """
+    sql = "UPDATE usuarios SET senha_hash = ?, deve_trocar_senha = ? WHERE id = ?"
     with _conectar() as conn:
-        cursor = conn.execute(sql, (novo_senha_hash, usuario_id))
+        cursor = conn.execute(sql, (novo_senha_hash, int(deve_trocar_senha), usuario_id))
         conn.commit()
         return cursor.rowcount > 0
+
+
+def usuario_bloqueado_no_momento(usuario_id: int) -> bool:
+    """Verifica se a conta está sob bloqueio temporário por excesso de tentativas de login incorretas."""
+    sql = """
+        SELECT 1 FROM usuarios
+        WHERE id = ? AND bloqueado_ate IS NOT NULL AND bloqueado_ate > datetime('now','localtime')
+    """
+    with _conectar() as conn:
+        row = conn.execute(sql, (usuario_id,)).fetchone()
+    return row is not None
+
+
+def registrar_tentativa_login_falha(usuario_id: int, max_tentativas: int, minutos_bloqueio: int) -> None:
+    """
+    Incrementa o contador de tentativas de login falhas de uma conta. Quando o
+    contador atinge `max_tentativas`, bloqueia a conta por `minutos_bloqueio`
+    minutos a partir de agora. Chamado apenas por `src.auth.autenticar()` a
+    cada senha incorreta — nunca recebe a senha em si.
+    """
+    modificador = f"+{int(minutos_bloqueio)} minutes"
+    sql = """
+        UPDATE usuarios
+        SET tentativas_login_falhas = tentativas_login_falhas + 1,
+            bloqueado_ate = CASE
+                WHEN tentativas_login_falhas + 1 >= ? THEN datetime('now','localtime', ?)
+                ELSE bloqueado_ate
+            END
+        WHERE id = ?
+    """
+    with _conectar() as conn:
+        conn.execute(sql, (int(max_tentativas), modificador, usuario_id))
+        conn.commit()
+
+
+def resetar_tentativas_login(usuario_id: int) -> None:
+    """Zera o contador de tentativas falhas e remove qualquer bloqueio ativo (chamado após login bem-sucedido)."""
+    sql = "UPDATE usuarios SET tentativas_login_falhas = 0, bloqueado_ate = NULL WHERE id = ?"
+    with _conectar() as conn:
+        conn.execute(sql, (usuario_id,))
+        conn.commit()
 
 
 def salvar_token_api(usuario_id: int, token_hash: str, ultimos4: str) -> bool:
