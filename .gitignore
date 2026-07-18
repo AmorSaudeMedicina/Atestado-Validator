@@ -56,3 +56,8 @@ __pycache__/
 # Banco SQLite local do validador de atestados — em produção (Railway) ele
 # vive no Volume persistente, nunca commitado junto com o código.
 artifacts/atestado-validator/data/*.db
+
+# Grafo de conhecimento do Graphify — gerado localmente por máquina/sessão
+# (graph.json, GRAPH_REPORT.md, graph.html, vault do Obsidian). Reconstrução
+# é rápida e sem custo de LLM via `graphify update .` ou o hook de commit.
+graphify-out/
