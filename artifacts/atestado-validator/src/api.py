@@ -23,6 +23,7 @@ import secrets as _secrets
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
+from src.audit import EVENTO_ATESTADO_EMITIDO, ORIGEM_API, registrar_evento
 from src.database import buscar_atestado_por_codigo, buscar_medico_por_token_hash, salvar_atestado
 from src.qr_generator import gerar_qr
 from src.api_tokens import hash_token
@@ -67,7 +68,7 @@ def _parse_data(valor: str, campo: str) -> date:
         raise ValueError(f"Campo '{campo}' deve estar no formato AAAA-MM-DD.")
 
 
-def registrar_atestado_core(medico: dict, corpo: dict, request: Request | None = None) -> dict:
+def registrar_atestado_core(medico: dict, corpo: dict, origem: str, request: Request | None = None) -> dict:
     """
     Lógica central de registro de um atestado, compartilhada por TODOS os
     caminhos de entrada (API REST em `registrar_atestado` abaixo e o
@@ -78,6 +79,8 @@ def registrar_atestado_core(medico: dict, corpo: dict, request: Request | None =
 
     `medico` já deve estar autenticado pelo chamador (dono do token).
     `corpo` é um dict com os mesmos campos aceitos pelo endpoint REST.
+    `origem` identifica de onde veio a chamada (ver src.audit.ORIGEM_*) —
+    grava na trilha de auditoria junto com o evento de emissão.
 
     Levanta ErroValidacaoAtestado (mensagem em português) se os dados forem
     inválidos. Não grava nada no banco nesse caso.
@@ -159,6 +162,13 @@ def registrar_atestado_core(medico: dict, corpo: dict, request: Request | None =
         data_fim=data_fim_str,
         dias_afastamento=dias_afastamento,
     )
+    registrar_evento(
+        EVENTO_ATESTADO_EMITIDO,
+        ator_usuario=medico["usuario"],
+        ator_perfil="medico",
+        atestado_codigo=codigo,
+        origem=origem,
+    )
 
     return {
         "codigo": codigo,
@@ -203,7 +213,7 @@ async def registrar_atestado(request: Request) -> Response:
         return _erro(400, "Corpo da requisição deve ser um objeto JSON.")
 
     try:
-        resultado = registrar_atestado_core(medico, corpo, request)
+        resultado = registrar_atestado_core(medico, corpo, ORIGEM_API, request)
     except ErroValidacaoAtestado as exc:
         return _erro(422, str(exc))
     except Exception:

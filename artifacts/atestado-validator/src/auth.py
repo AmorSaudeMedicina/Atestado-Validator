@@ -34,6 +34,12 @@ from typing import Optional
 
 import bcrypt
 
+from src.audit import (
+    EVENTO_LOGIN_BLOQUEADO,
+    EVENTO_LOGIN_FALHA,
+    EVENTO_LOGIN_SUCESSO,
+    registrar_evento,
+)
 from src.database import (
     buscar_usuario_por_login,
     contar_usuarios,
@@ -254,13 +260,24 @@ def autenticar(usuario: str, senha: str) -> Optional[dict]:
     """
     registro = buscar_usuario_por_login(usuario)
     if not registro:
+        registrar_evento(EVENTO_LOGIN_FALHA, ator_usuario=usuario, detalhe="usuario inexistente")
         return None
     if not registro["ativo"]:
+        registrar_evento(
+            EVENTO_LOGIN_FALHA, ator_usuario=usuario, ator_perfil=registro["perfil"], detalhe="conta desativada"
+        )
         return None
     if usuario_bloqueado_no_momento(registro["id"]):
+        registrar_evento(
+            EVENTO_LOGIN_FALHA, ator_usuario=usuario, ator_perfil=registro["perfil"], detalhe="conta bloqueada"
+        )
         return None
     if not verificar_senha(senha, registro["senha_hash"]):
-        registrar_tentativa_login_falha(registro["id"], _MAX_TENTATIVAS_LOGIN, _MINUTOS_BLOQUEIO)
+        cruzou_limite = registrar_tentativa_login_falha(registro["id"], _MAX_TENTATIVAS_LOGIN, _MINUTOS_BLOQUEIO)
+        registrar_evento(EVENTO_LOGIN_FALHA, ator_usuario=usuario, ator_perfil=registro["perfil"])
+        if cruzou_limite:
+            registrar_evento(EVENTO_LOGIN_BLOQUEADO, ator_usuario=usuario, ator_perfil=registro["perfil"])
         return None
     resetar_tentativas_login(registro["id"])
+    registrar_evento(EVENTO_LOGIN_SUCESSO, ator_usuario=usuario, ator_perfil=registro["perfil"])
     return {k: v for k, v in registro.items() if k != "senha_hash"}

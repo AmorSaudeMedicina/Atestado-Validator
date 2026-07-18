@@ -14,6 +14,8 @@ vindo de .streamlit/config.toml, como antes.
 import logging
 import os
 import re
+import threading
+import time as _time
 from pathlib import Path
 
 import uvicorn
@@ -22,6 +24,7 @@ from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 from streamlit.web.server.starlette import App
 
+from src.audit import limpar_eventos_antigos
 from src.auth import semear_usuarios_iniciais
 from src.database import init_db
 from src.api import obter_qr_code, registrar_atestado
@@ -85,6 +88,23 @@ init_db()
 # que sempre existe uma conta para logar. Idempotente: se o banco já tem
 # alguma conta (mesmo em reinícios seguintes), não faz nada.
 semear_usuarios_iniciais()
+
+# Retenção da trilha de auditoria (AUDIT_RETENTION_DAYS, padrão 365 dias):
+# limpa já na subida (cobre reinícios/deploys) e depois a cada 24h em uma
+# thread em segundo plano, para processos de longa duração entre deploys —
+# ver src/audit.py. Nunca levanta exceção (nem aqui nem dentro da thread).
+limpar_eventos_antigos()
+
+_INTERVALO_LIMPEZA_AUDITORIA_SEGUNDOS = 24 * 60 * 60
+
+
+def _loop_limpeza_auditoria() -> None:
+    while True:
+        _time.sleep(_INTERVALO_LIMPEZA_AUDITORIA_SEGUNDOS)
+        limpar_eventos_antigos()
+
+
+threading.Thread(target=_loop_limpeza_auditoria, daemon=True, name="limpeza-auditoria").start()
 
 _SCRIPT_PATH = str(Path(__file__).resolve().parent / "app.py")
 

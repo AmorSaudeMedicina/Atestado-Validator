@@ -140,6 +140,34 @@ CREATE TABLE IF NOT EXISTS oauth_access_tokens (
 )
 """
 
+# ---------------------------------------------------------------------------
+# Trilha de auditoria (LGPD/segurança, parte 3) — quem fez o quê e quando.
+# NUNCA guarda dado sensível de paciente: atestados são referenciados só
+# pelo `atestado_codigo` (não sensível — é o mesmo código já público da
+# verificação). `detalhe` é só texto operacional curto (ex.: usuário do
+# médico afetado por uma ação do admin), nunca nome de paciente nem CID.
+# Ver src/audit.py para a política de gravação (nunca derruba a operação
+# principal) e de retenção (AUDIT_RETENTION_DAYS).
+# ---------------------------------------------------------------------------
+
+_CREATE_EVENTOS_AUDITORIA = """
+CREATE TABLE IF NOT EXISTS eventos_auditoria (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    criado_em       TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+    tipo_evento     TEXT NOT NULL,
+    ator_usuario    TEXT,
+    ator_perfil     TEXT,
+    atestado_codigo TEXT,
+    origem          TEXT,
+    detalhe         TEXT
+)
+"""
+
+_CREATE_INDICES_AUDITORIA = (
+    "CREATE INDEX IF NOT EXISTS idx_auditoria_criado_em ON eventos_auditoria(criado_em)",
+    "CREATE INDEX IF NOT EXISTS idx_auditoria_tipo ON eventos_auditoria(tipo_evento)",
+)
+
 
 def _conectar() -> sqlite3.Connection:
     """
@@ -187,6 +215,9 @@ def init_db() -> None:
         conn.execute(_CREATE_OAUTH_CLIENTS)
         conn.execute(_CREATE_OAUTH_AUTH_CODES)
         conn.execute(_CREATE_OAUTH_ACCESS_TOKENS)
+        conn.execute(_CREATE_EVENTOS_AUDITORIA)
+        for sql_indice in _CREATE_INDICES_AUDITORIA:
+            conn.execute(sql_indice)
         conn.commit()
 
     migrar_atestados_para_cifrado()
@@ -297,12 +328,17 @@ def usuario_bloqueado_no_momento(usuario_id: int) -> bool:
     return row is not None
 
 
-def registrar_tentativa_login_falha(usuario_id: int, max_tentativas: int, minutos_bloqueio: int) -> None:
+def registrar_tentativa_login_falha(usuario_id: int, max_tentativas: int, minutos_bloqueio: int) -> bool:
     """
     Incrementa o contador de tentativas de login falhas de uma conta. Quando o
     contador atinge `max_tentativas`, bloqueia a conta por `minutos_bloqueio`
     minutos a partir de agora. Chamado apenas por `src.auth.autenticar()` a
     cada senha incorreta — nunca recebe a senha em si.
+
+    Retorna True se esta chamada foi a que cruzou o limite e bloqueou a
+    conta agora (usado por src.auth para logar um evento de auditoria
+    distinto de "login falho" — "conta bloqueada" — só no momento exato em
+    que o bloqueio começa, não em cada tentativa repetida durante o bloqueio).
     """
     modificador = f"+{int(minutos_bloqueio)} minutes"
     sql = """
@@ -317,6 +353,10 @@ def registrar_tentativa_login_falha(usuario_id: int, max_tentativas: int, minuto
     with _conectar() as conn:
         conn.execute(sql, (int(max_tentativas), modificador, usuario_id))
         conn.commit()
+        row = conn.execute(
+            "SELECT tentativas_login_falhas FROM usuarios WHERE id = ?", (usuario_id,)
+        ).fetchone()
+    return bool(row and row["tentativas_login_falhas"] == int(max_tentativas))
 
 
 def resetar_tentativas_login(usuario_id: int) -> None:
@@ -586,3 +626,81 @@ def revogar_atestado(codigo: str, crm: str) -> bool:
         cursor = conn.execute(sql, (codigo, crm))
         conn.commit()
         return cursor.rowcount > 0
+
+
+# ---------------------------------------------------------------------------
+# Trilha de auditoria — CRUD puro (a política de "nunca derruba a operação
+# principal" e a leitura de AUDIT_RETENTION_DAYS ficam em src/audit.py, que
+# chama estas funções; mantê-las aqui, sem regras de negócio, evita import
+# circular entre database.py e audit.py).
+# ---------------------------------------------------------------------------
+
+def inserir_evento_auditoria(
+    tipo_evento: str,
+    ator_usuario: Optional[str],
+    ator_perfil: Optional[str],
+    atestado_codigo: Optional[str],
+    origem: Optional[str],
+    detalhe: Optional[str],
+) -> None:
+    """Grava um evento de auditoria. Levanta exceção normalmente em caso de erro — quem chama (src.audit) trata."""
+    sql = """
+        INSERT INTO eventos_auditoria
+            (tipo_evento, ator_usuario, ator_perfil, atestado_codigo, origem, detalhe)
+        VALUES (?,?,?,?,?,?)
+    """
+    with _conectar() as conn:
+        conn.execute(sql, (tipo_evento, ator_usuario, ator_perfil, atestado_codigo, origem, detalhe))
+        conn.commit()
+
+
+def listar_eventos_auditoria(
+    data_inicio: Optional[str] = None,
+    data_fim: Optional[str] = None,
+    tipo_evento: Optional[str] = None,
+    pagina: int = 1,
+    por_pagina: int = 25,
+) -> tuple[list[dict], int]:
+    """
+    Retorna (eventos da página, total de eventos que batem com o filtro),
+    mais recentes primeiro. `data_inicio`/`data_fim` no formato 'AAAA-MM-DD'
+    (inclusive nas duas pontas); `tipo_evento` filtra por um tipo exato.
+    """
+    condicoes = []
+    params: list = []
+    if data_inicio:
+        condicoes.append("date(criado_em) >= date(?)")
+        params.append(data_inicio)
+    if data_fim:
+        condicoes.append("date(criado_em) <= date(?)")
+        params.append(data_fim)
+    if tipo_evento:
+        condicoes.append("tipo_evento = ?")
+        params.append(tipo_evento)
+    where = f"WHERE {' AND '.join(condicoes)}" if condicoes else ""
+
+    pagina = max(1, int(pagina))
+    por_pagina = max(1, int(por_pagina))
+    offset = (pagina - 1) * por_pagina
+
+    with _conectar() as conn:
+        total = conn.execute(
+            f"SELECT COUNT(*) AS n FROM eventos_auditoria {where}", params
+        ).fetchone()["n"]
+        rows = conn.execute(
+            f"SELECT * FROM eventos_auditoria {where} ORDER BY id DESC LIMIT ? OFFSET ?",
+            params + [por_pagina, offset],
+        ).fetchall()
+    return [dict(r) for r in rows], int(total)
+
+
+def limpar_eventos_auditoria_antigos(dias_retencao: int) -> int:
+    """Remove eventos de auditoria com mais de `dias_retencao` dias. Retorna quantos foram removidos."""
+    modificador = f"-{int(dias_retencao)} days"
+    with _conectar() as conn:
+        cursor = conn.execute(
+            "DELETE FROM eventos_auditoria WHERE criado_em < datetime('now','localtime', ?)",
+            (modificador,),
+        )
+        conn.commit()
+        return cursor.rowcount

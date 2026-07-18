@@ -35,6 +35,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
 from src.api import ErroValidacaoAtestado, registrar_atestado_core
+from src.audit import ORIGEM_MCP
 from src.api_tokens import hash_token
 from src.database import buscar_medico_por_oauth_token_hash
 from src.urls import url_base
@@ -134,7 +135,7 @@ async def _processar_mensagem(msg: Any, medico: dict, request: Request) -> dict 
                 return None
             return _erro_jsonrpc(id_, -32602, f"Ferramenta desconhecida: '{nome_ferramenta}'.")
         try:
-            dados = registrar_atestado_core(medico, argumentos, request)
+            dados = registrar_atestado_core(medico, argumentos, ORIGEM_MCP, request)
             texto = json.dumps(dados, ensure_ascii=False, indent=2)
             resultado = {
                 "content": [

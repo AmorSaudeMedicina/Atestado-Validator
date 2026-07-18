@@ -25,6 +25,21 @@ from pathlib import Path
 import streamlit as st
 import streamlit.components.v1 as components
 
+from src.audit import (
+    EVENTO_ATESTADO_EMITIDO,
+    EVENTO_ATESTADO_REVOGADO,
+    EVENTO_MEDICO_ATIVADO,
+    EVENTO_MEDICO_CRIADO,
+    EVENTO_MEDICO_DESATIVADO,
+    EVENTO_SENHA_REDEFINIDA_ADMIN,
+    EVENTO_SENHA_TROCADA_PROPRIA,
+    ORIGEM_FORMULARIO,
+    ORIGEM_PAINEL_ADMIN,
+    RÓTULOS_TIPOS_DE_EVENTO,
+    TODOS_OS_TIPOS_DE_EVENTO,
+    limpar_eventos_antigos,
+    registrar_evento,
+)
 from src.auth import autenticar, esta_bloqueado, gerar_hash_senha, semear_usuarios_iniciais, validar_senha_forte
 from src.database import (
     buscar_atestado_por_codigo,
@@ -34,6 +49,7 @@ from src.database import (
     definir_status_usuario,
     init_db,
     listar_atestados_por_crm,
+    listar_eventos_auditoria,
     listar_medicos,
     redefinir_senha_usuario,
     revogar_atestado,
@@ -129,6 +145,7 @@ st.set_page_config(
 # ---------------------------------------------------------------------------
 init_db()
 semear_usuarios_iniciais()
+limpar_eventos_antigos()
 
 
 # ---------------------------------------------------------------------------
@@ -1264,6 +1281,11 @@ def tela_trocar_senha_obrigatoria() -> None:
                     st.error("As senhas informadas não coincidem.")
                 else:
                     redefinir_senha_usuario(conta["id"], gerar_hash_senha(nova_senha))
+                    registrar_evento(
+                        EVENTO_SENHA_TROCADA_PROPRIA,
+                        ator_usuario=conta["usuario"],
+                        ator_perfil=conta.get("perfil"),
+                    )
                     conta_atualizada = dict(conta)
                     conta_atualizada["deve_trocar_senha"] = 0
                     st.session_state["usuario"] = conta_atualizada
@@ -1292,13 +1314,23 @@ def tela_admin() -> None:
         st.error("Sessão inválida. Faça login novamente.")
         st.stop()
 
+    # Navegação simples entre o painel principal e a trilha de auditoria —
+    # ambas as telas vivem atrás desta mesma checagem de perfil admin acima.
+    if st.session_state.get("ver_auditoria"):
+        tela_auditoria()
+        return
+
     conteudo_direita = (
         f'<div style="font-size:1.0625rem; font-weight:800; letter-spacing:-0.01em;">{html.escape(admin["nome"])}</div>'
         f'<div style="font-size:0.8125rem; font-weight:600; opacity:0.85; letter-spacing:0.02em;">Administrador</div>'
     )
     _barra_cabecalho(conteudo_direita)
 
-    col_espaco, col_sair = st.columns([5, 1])
+    col_espaco, col_auditoria, col_sair = st.columns([4, 1.6, 1])
+    with col_auditoria:
+        if st.button("Trilha de auditoria", use_container_width=True, type="secondary", key="ver_auditoria_btn"):
+            st.session_state["ver_auditoria"] = True
+            st.rerun()
     with col_sair:
         if st.button("Sair", use_container_width=True, type="secondary", key="sair_admin"):
             del st.session_state["usuario"]
@@ -1351,6 +1383,13 @@ def tela_admin() -> None:
                     perfil="medico",
                     crm=crm_medico.strip(),
                     especialidade=especialidade_medico.strip() or None,
+                )
+                registrar_evento(
+                    EVENTO_MEDICO_CRIADO,
+                    ator_usuario=admin["usuario"],
+                    ator_perfil="admin",
+                    origem=ORIGEM_PAINEL_ADMIN,
+                    detalhe=f"medico: {usuario_medico.strip()} ({crm_medico.strip()})",
                 )
                 st.success(f"Conta criada para {nome_medico.strip()}.")
                 st.rerun()
@@ -1407,7 +1446,15 @@ def tela_admin() -> None:
                     with col_toggle:
                         rotulo = "Desativar" if m["ativo"] else "Ativar"
                         if st.button(rotulo, key=f"toggle_{m['id']}", use_container_width=True, type="secondary"):
-                            definir_status_usuario(m["id"], not m["ativo"])
+                            novo_status_ativo = not m["ativo"]
+                            definir_status_usuario(m["id"], novo_status_ativo)
+                            registrar_evento(
+                                EVENTO_MEDICO_ATIVADO if novo_status_ativo else EVENTO_MEDICO_DESATIVADO,
+                                ator_usuario=admin["usuario"],
+                                ator_perfil="admin",
+                                origem=ORIGEM_PAINEL_ADMIN,
+                                detalhe=f"medico: {m['usuario']}",
+                            )
                             st.rerun()
                     with col_reset:
                         if st.button("Redefinir senha", key=f"btn_{chave_reset}", use_container_width=True, type="secondary"):
@@ -1432,6 +1479,13 @@ def tela_admin() -> None:
                             st.error(erro_nova_senha)
                         else:
                             redefinir_senha_usuario(m["id"], gerar_hash_senha(nova_senha))
+                            registrar_evento(
+                                EVENTO_SENHA_REDEFINIDA_ADMIN,
+                                ator_usuario=admin["usuario"],
+                                ator_perfil="admin",
+                                origem=ORIGEM_PAINEL_ADMIN,
+                                detalhe=f"medico: {m['usuario']}",
+                            )
                             st.session_state.pop(chave_reset, None)
                             st.success("Senha redefinida com sucesso.")
                             st.rerun()
@@ -1444,6 +1498,128 @@ def tela_admin() -> None:
     st.write("")
     st.divider()
     _secao_api_integracoes()
+
+    _rodape()
+
+
+# ---------------------------------------------------------------------------
+# TELA 3.5 — Trilha de auditoria (admin) — Segurança/LGPD, parte 3
+# ---------------------------------------------------------------------------
+
+_AUDITORIA_POR_PAGINA = 25
+
+
+def tela_auditoria() -> None:
+    """
+    Lista os eventos mais recentes da trilha de auditoria, com filtro por
+    período/tipo de ação e paginação simples. Só é alcançável a partir de
+    `tela_admin()` (mesma checagem de perfil admin já feita lá) — repete a
+    checagem aqui mesmo assim, pelo mesmo motivo "fail-closed" das outras
+    telas: uma sessão inconsistente/adulterada nunca deve conseguir chegar
+    aqui sem ser admin.
+    """
+    admin = st.session_state["usuario"]
+    if admin.get("perfil") != "admin":
+        st.session_state.pop("usuario", None)
+        st.error("Sessão inválida. Faça login novamente.")
+        st.stop()
+
+    conteudo_direita = (
+        f'<div style="font-size:1.0625rem; font-weight:800; letter-spacing:-0.01em;">{html.escape(admin["nome"])}</div>'
+        f'<div style="font-size:0.8125rem; font-weight:600; opacity:0.85; letter-spacing:0.02em;">Administrador</div>'
+    )
+    _barra_cabecalho(conteudo_direita)
+
+    col_espaco, col_voltar, col_sair = st.columns([4, 1.6, 1])
+    with col_voltar:
+        if st.button("Voltar ao painel", use_container_width=True, type="secondary", key="voltar_painel_btn"):
+            st.session_state.pop("ver_auditoria", None)
+            st.session_state.pop("audit_pagina", None)
+            st.rerun()
+    with col_sair:
+        if st.button("Sair", use_container_width=True, type="secondary", key="sair_auditoria"):
+            del st.session_state["usuario"]
+            st.rerun()
+
+    icone_auditoria = _svg("shield-check", 17, COR_PRIMARIA, "margin-right:0.5rem; vertical-align:middle; flex-shrink:0")
+    st.markdown(
+        f'<h3 style="color:{COR_PRIMARIA}; margin-top:0; margin-bottom:0.25rem; display:flex; align-items:center; '
+        f'font-family:\'Nunito Sans\',sans-serif; font-size:1.0625rem; font-weight:800; letter-spacing:-0.005em;">'
+        f'{icone_auditoria} Trilha de auditoria</h3>',
+        unsafe_allow_html=True,
+    )
+    st.caption(
+        "Quem fez o quê e quando. Atestados aparecem só pelo código — nome de paciente e CID nunca ficam aqui."
+    )
+
+    col_data_ini, col_data_fim, col_tipo = st.columns([1, 1, 1.4])
+    with col_data_ini:
+        data_inicio = st.date_input("De", value=None, key="audit_data_inicio")
+    with col_data_fim:
+        data_fim = st.date_input("Até", value=None, key="audit_data_fim")
+    with col_tipo:
+        opcoes_tipo = ["Todos os tipos"] + TODOS_OS_TIPOS_DE_EVENTO
+        tipo_selecionado = st.selectbox(
+            "Tipo de ação",
+            options=opcoes_tipo,
+            format_func=lambda t: t if t == "Todos os tipos" else RÓTULOS_TIPOS_DE_EVENTO.get(t, t),
+            key="audit_tipo",
+        )
+
+    pagina_atual = st.session_state.get("audit_pagina", 1)
+    eventos, total = listar_eventos_auditoria(
+        data_inicio=str(data_inicio) if data_inicio else None,
+        data_fim=str(data_fim) if data_fim else None,
+        tipo_evento=None if tipo_selecionado == "Todos os tipos" else tipo_selecionado,
+        pagina=pagina_atual,
+        por_pagina=_AUDITORIA_POR_PAGINA,
+    )
+    total_paginas = max(1, -(-total // _AUDITORIA_POR_PAGINA))
+    if pagina_atual > total_paginas:
+        pagina_atual = total_paginas
+        st.session_state["audit_pagina"] = pagina_atual
+        eventos, total = listar_eventos_auditoria(
+            data_inicio=str(data_inicio) if data_inicio else None,
+            data_fim=str(data_fim) if data_fim else None,
+            tipo_evento=None if tipo_selecionado == "Todos os tipos" else tipo_selecionado,
+            pagina=pagina_atual,
+            por_pagina=_AUDITORIA_POR_PAGINA,
+        )
+
+    st.caption(f"{total} evento(s) encontrado(s)")
+
+    if not eventos:
+        st.info("Nenhum evento de auditoria para esse filtro.")
+    else:
+        linhas_tabela = [
+            {
+                "Data/hora": e["criado_em"],
+                "Ação": RÓTULOS_TIPOS_DE_EVENTO.get(e["tipo_evento"], e["tipo_evento"]),
+                "Quem": e["ator_usuario"] or "—",
+                "Perfil": e["ator_perfil"] or "—",
+                "Atestado (código)": (e["atestado_codigo"][:16] + "…") if e["atestado_codigo"] else "—",
+                "Origem": e["origem"] or "—",
+                "Detalhe": e["detalhe"] or "—",
+            }
+            for e in eventos
+        ]
+        st.dataframe(linhas_tabela, use_container_width=True, hide_index=True)
+
+    col_prev, col_info, col_next = st.columns([1, 2, 1])
+    with col_prev:
+        if st.button("< Anterior", disabled=(pagina_atual <= 1), use_container_width=True, key="audit_prev"):
+            st.session_state["audit_pagina"] = pagina_atual - 1
+            st.rerun()
+    with col_info:
+        st.markdown(
+            f'<p style="text-align:center; margin-top:0.4rem; color:{COR_TEXTO};">'
+            f'Página {pagina_atual} de {total_paginas}</p>',
+            unsafe_allow_html=True,
+        )
+    with col_next:
+        if st.button("Próxima >", disabled=(pagina_atual >= total_paginas), use_container_width=True, key="audit_next"):
+            st.session_state["audit_pagina"] = pagina_atual + 1
+            st.rerun()
 
     _rodape()
 
@@ -1665,6 +1841,13 @@ def tela_dashboard() -> None:
                     data_fim=str(data_fim_val) if data_fim_val else None,
                     dias_afastamento=int(dias) if dias else None,
                 )
+                registrar_evento(
+                    EVENTO_ATESTADO_EMITIDO,
+                    ator_usuario=medico["usuario"],
+                    ator_perfil="medico",
+                    atestado_codigo=codigo,
+                    origem=ORIGEM_FORMULARIO,
+                )
             except Exception as exc:
                 st.error(f"Erro ao salvar atestado: {exc}. Tente novamente.")
                 st.stop()
@@ -1814,6 +1997,14 @@ def tela_dashboard() -> None:
                                 st.session_state["erro_revogacao"] = (
                                     "Não foi possível revogar este atestado — "
                                     "ele já pode ter sido revogado nesse meio tempo."
+                                )
+                            else:
+                                registrar_evento(
+                                    EVENTO_ATESTADO_REVOGADO,
+                                    ator_usuario=medico["usuario"],
+                                    ator_perfil="medico",
+                                    atestado_codigo=codigo_atestado,
+                                    origem=ORIGEM_FORMULARIO,
                                 )
                             st.rerun()
                     with col_conf2:
