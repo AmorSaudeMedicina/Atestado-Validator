@@ -31,10 +31,24 @@ if TYPE_CHECKING:
     from starlette.requests import Request
 
 # Sufixos de domínio confiáveis para aceitar via cabeçalho (dev e produção no
-# Replit). Um domínio customizado, se o usuário configurar um na publicação,
-# pode ser adicionado aqui através da env var PUBLIC_HOST_SUFFIXES_EXTRA
-# (lista separada por vírgula, ex.: "meudominio.com.br").
-_SUFIXOS_HOST_CONFIAVEIS = (".replit.dev", ".replit.app", "localhost", "127.0.0.1")
+# Replit e no Railway). Um domínio customizado, se o usuário configurar um na
+# publicação, pode ser adicionado aqui através da env var
+# PUBLIC_HOST_SUFFIXES_EXTRA (lista separada por vírgula, ex.: "meudominio.com.br").
+#
+# `.up.railway.app` é o domínio público padrão gerado pelo Railway; `.railway.app`
+# cobre variações/domínios internos do Railway. Sem esses sufixos, atrás do proxy
+# do Railway o `X-Forwarded-Host` (ex.: atestado-validator-production.up.railway.app)
+# era rejeitado por `_host_e_confiavel`, `url_base` caía no fallback localhost, e
+# o metadata OAuth/MCP saía apontando para http://localhost:5000 — quebrando o
+# Dynamic Client Registration da Claude com "mcp_registration_failed".
+_SUFIXOS_HOST_CONFIAVEIS = (
+    ".replit.dev",
+    ".replit.app",
+    ".up.railway.app",
+    ".railway.app",
+    "localhost",
+    "127.0.0.1",
+)
 
 # Formato aceitável de host: letras/números/hífen/ponto, opcionalmente com
 # porta — nunca espaços, vírgulas, barras, ou outros caracteres que
@@ -109,7 +123,7 @@ def url_base(request: "Request | None" = None) -> str:
     Passe `request` sempre que estiver dentro de um handler HTTP (Starlette) —
     é a fonte mais confiável. Sem `request`, tenta o contexto da página
     Streamlit; se nada disso estiver disponível, cai para as variáveis de
-    ambiente do Replit (dev) ou localhost (execução local avulsa).
+    ambiente da hospedagem (Railway/Replit) ou localhost (execução local avulsa).
     """
     if request is not None:
         base = _base_a_partir_da_requisicao(request)
@@ -119,6 +133,23 @@ def url_base(request: "Request | None" = None) -> str:
     base = _base_a_partir_do_contexto_streamlit()
     if base:
         return base
+
+    # Fallbacks para contextos SEM requisição HTTP (ex.: um script avulso).
+    # No fluxo normal OAuth/MCP o caminho acima (a partir da requisição) já
+    # resolve o domínio público via X-Forwarded-Host/Proto; estes só entram
+    # quando não há `request` nem contexto Streamlit.
+
+    # PUBLIC_BASE_URL: override manual explícito, tem prioridade máxima
+    # (ex.: "https://atestado-validator-production.up.railway.app").
+    base_manual = os.environ.get("PUBLIC_BASE_URL", "").strip()
+    if base_manual:
+        return base_manual.rstrip("/") + "/"
+
+    # RAILWAY_PUBLIC_DOMAIN: injetada automaticamente pelo Railway com o
+    # domínio público do serviço (sem esquema). Sempre HTTPS em produção.
+    dominio_railway = os.environ.get("RAILWAY_PUBLIC_DOMAIN", "").strip()
+    if dominio_railway:
+        return f"https://{dominio_railway}/"
 
     dominio = os.environ.get("REPLIT_DEV_DOMAIN", "")
     if dominio:
