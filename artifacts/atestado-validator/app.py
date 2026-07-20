@@ -59,6 +59,12 @@ from src.database import (
     salvar_token_api,
 )
 from src.qr_generator import gerar_qr
+from src.retencao import (
+    aplicar_retencao_automatica,
+    anonimizar_atestado_manual,
+    dias_retencao_atestados_configurados,
+    excluir_atestado_manual,
+)
 from src.urls import url_base as _url_base_compartilhada, url_qr_publica
 from src.api_tokens import gerar_token, hash_token, mascarar_token
 
@@ -74,6 +80,8 @@ COR_BRANCO = "#FFFFFF"
 COR_BORDA = "#D7ECEF"
 COR_AMBAR = "#B9770E"       # âmbar neutro — usado apenas no estado "não encontrado"
 COR_AMBAR_FUNDO = "#FDF2E3"
+COR_NEUTRA = "#7A7A7A"      # cinza neutro — usado apenas no estado "dados removidos" (anonimizado)
+COR_NEUTRA_FUNDO = "#EFEFEF"
 
 # ---------------------------------------------------------------------------
 # Biblioteca de ícones Lucide (SVG inline — traço de linha, sem preenchimento)
@@ -113,6 +121,9 @@ _ICO: dict[str, str] = {
     "bot":            '<path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/>',
     "globe":          '<circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/>',
     "stethoscope":    '<path d="M4.8 2.3A.3.3 0 1 0 5 2H4a2 2 0 0 0-2 2v5a6 6 0 0 0 6 6v0a6 6 0 0 0 6-6V4a2 2 0 0 0-2-2h-1a.2.2 0 1 0 .3.3"/><path d="M8 15v1a6 6 0 0 0 6 6v0a6 6 0 0 0 6-6v-4"/><circle cx="20" cy="10" r="2"/>',
+    # retenção/exclusão de dados (LGPD, parte 4)
+    "trash-2":        '<path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/>',
+    "user-x":         '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="17" x2="22" y1="8" y2="13"/><line x1="22" x2="17" y1="8" y2="13"/>',
 }
 
 
@@ -146,6 +157,7 @@ st.set_page_config(
 init_db()
 semear_usuarios_iniciais()
 limpar_eventos_antigos()
+aplicar_retencao_automatica()
 
 
 # ---------------------------------------------------------------------------
@@ -1124,7 +1136,25 @@ def tela_verificacao(codigo: str) -> None:
                 status = atestado.get("status") or "ativo"
                 revogado_em = atestado.get("revogado_em")
 
-                if status == "revogado":
+                if status == "anonimizado":
+                    # Atestado existiu e foi registrado, mas os dados pessoais
+                    # (paciente, CID) foram removidos — a pedido do titular
+                    # (LGPD) ou por política de retenção. Não há dado sensível
+                    # para exibir aqui; só o fato de que o registro existiu.
+                    _selo_status(
+                        icone_svg=_svg("info", 36, COR_NEUTRA),
+                        titulo="Registro existente — dados pessoais removidos",
+                        cor=COR_NEUTRA,
+                        cor_fundo=COR_NEUTRA_FUNDO,
+                        subtitulo=(
+                            "Este atestado foi emitido e registrado nesta plataforma, mas os "
+                            "dados pessoais (paciente e diagnóstico) foram removidos, a pedido "
+                            "do titular ou por política de retenção de dados."
+                        ),
+                    )
+                    st.divider()
+                    _bloco_metadados_verificacao(codigo)
+                elif status == "revogado":
                     # _selo_status escapa `subtitulo` internamente — não escapar aqui
                     # de novo, senão o texto apareceria com entidades HTML duplicadas.
                     _selo_status(
@@ -1146,32 +1176,33 @@ def tela_verificacao(codigo: str) -> None:
                         cor_fundo=COR_FUNDO_CLARO,
                     )
 
-                _frase_confianca()
+                if status != "anonimizado":
+                    _frase_confianca()
 
-                st.markdown(
-                    f'<p style="color:{COR_TEXTO}; font-weight:700; font-size:0.875rem; '
-                    f'letter-spacing:0.04em; text-transform:uppercase; opacity:0.6; '
-                    f'font-family:\'Nunito Sans\',sans-serif; margin:0 0 0.75rem 0;">'
-                    f'Dados validados</p>',
-                    unsafe_allow_html=True,
-                )
-                with st.container(border=True):
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        _campo_dado("Médico", atestado["nome_medico"])
-                        _campo_dado("CRM", atestado["crm"])
-                        _campo_dado("Data de emissão", atestado["data_emissao"])
-                    with col2:
-                        _campo_dado("Paciente", atestado["nome_paciente"])
-                        _campo_cid_protegido()
-                        _campo_dado("Período de afastamento", _formatar_periodo(atestado))
+                    st.markdown(
+                        f'<p style="color:{COR_TEXTO}; font-weight:700; font-size:0.875rem; '
+                        f'letter-spacing:0.04em; text-transform:uppercase; opacity:0.6; '
+                        f'font-family:\'Nunito Sans\',sans-serif; margin:0 0 0.75rem 0;">'
+                        f'Dados validados</p>',
+                        unsafe_allow_html=True,
+                    )
+                    with st.container(border=True):
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            _campo_dado("Médico", atestado["nome_medico"])
+                            _campo_dado("CRM", atestado["crm"])
+                            _campo_dado("Data de emissão", atestado["data_emissao"])
+                        with col2:
+                            _campo_dado("Paciente", atestado["nome_paciente"])
+                            _campo_cid_protegido()
+                            _campo_dado("Período de afastamento", _formatar_periodo(atestado))
 
-                _bloco_metadados_verificacao(codigo)
+                    _bloco_metadados_verificacao(codigo)
 
-                st.markdown('<div class="amorsaude-nao-imprimir">', unsafe_allow_html=True)
-                st.write("")
-                _botao_imprimir()
-                st.markdown("</div>", unsafe_allow_html=True)
+                    st.markdown('<div class="amorsaude-nao-imprimir">', unsafe_allow_html=True)
+                    st.write("")
+                    _botao_imprimir()
+                    st.markdown("</div>", unsafe_allow_html=True)
 
             _bloco_como_funciona()
 
@@ -1314,10 +1345,14 @@ def tela_admin() -> None:
         st.error("Sessão inválida. Faça login novamente.")
         st.stop()
 
-    # Navegação simples entre o painel principal e a trilha de auditoria —
-    # ambas as telas vivem atrás desta mesma checagem de perfil admin acima.
+    # Navegação simples entre o painel principal e as telas de auditoria e de
+    # retenção/exclusão — todas vivem atrás desta mesma checagem de perfil
+    # admin acima.
     if st.session_state.get("ver_auditoria"):
         tela_auditoria()
+        return
+    if st.session_state.get("ver_retencao"):
+        tela_retencao()
         return
 
     conteudo_direita = (
@@ -1326,7 +1361,11 @@ def tela_admin() -> None:
     )
     _barra_cabecalho(conteudo_direita)
 
-    col_espaco, col_auditoria, col_sair = st.columns([4, 1.6, 1])
+    col_espaco, col_retencao, col_auditoria, col_sair = st.columns([2.6, 1.9, 1.6, 1])
+    with col_retencao:
+        if st.button("Retenção/Exclusão", use_container_width=True, type="secondary", key="ver_retencao_btn"):
+            st.session_state["ver_retencao"] = True
+            st.rerun()
     with col_auditoria:
         if st.button("Trilha de auditoria", use_container_width=True, type="secondary", key="ver_auditoria_btn"):
             st.session_state["ver_auditoria"] = True
@@ -1625,6 +1664,203 @@ def tela_auditoria() -> None:
 
 
 # ---------------------------------------------------------------------------
+# TELA 3.6 — Retenção e exclusão de dados (admin) — Segurança/LGPD, parte 4
+# ---------------------------------------------------------------------------
+
+_RÓTULOS_STATUS_ATESTADO = {
+    "ativo": "Ativo",
+    "revogado": "Revogado",
+    "anonimizado": "Anonimizado (dados pessoais já removidos)",
+}
+
+
+def tela_retencao() -> None:
+    """
+    Ferramenta manual do admin para atender pedidos de titular (direito de
+    exclusão da LGPD): localizar um atestado pelo código e ANONIMIZAR
+    (remove nome/CID, mantém o registro) ou EXCLUIR definitivamente (apaga
+    tudo, sem volta). Só é alcançável a partir de `tela_admin()` (mesma
+    checagem de perfil admin já feita lá) — repete a checagem aqui mesmo
+    assim, pelo mesmo motivo "fail-closed" das outras telas.
+    """
+    admin = st.session_state["usuario"]
+    if admin.get("perfil") != "admin":
+        st.session_state.pop("usuario", None)
+        st.error("Sessão inválida. Faça login novamente.")
+        st.stop()
+
+    conteudo_direita = (
+        f'<div style="font-size:1.0625rem; font-weight:800; letter-spacing:-0.01em;">{html.escape(admin["nome"])}</div>'
+        f'<div style="font-size:0.8125rem; font-weight:600; opacity:0.85; letter-spacing:0.02em;">Administrador</div>'
+    )
+    _barra_cabecalho(conteudo_direita)
+
+    col_espaco, col_voltar, col_sair = st.columns([4, 1.6, 1])
+    with col_voltar:
+        if st.button("Voltar ao painel", use_container_width=True, type="secondary", key="voltar_painel_retencao_btn"):
+            st.session_state.pop("ver_retencao", None)
+            st.session_state.pop("retencao_confirmar_anonimizar_codigo", None)
+            st.session_state.pop("retencao_confirmar_exclusao_codigo", None)
+            st.rerun()
+    with col_sair:
+        if st.button("Sair", use_container_width=True, type="secondary", key="sair_retencao"):
+            del st.session_state["usuario"]
+            st.rerun()
+
+    icone_retencao = _svg("trash-2", 17, COR_PRIMARIA, "margin-right:0.5rem; vertical-align:middle; flex-shrink:0")
+    st.markdown(
+        f'<h3 style="color:{COR_PRIMARIA}; margin-top:0; margin-bottom:0.25rem; display:flex; align-items:center; '
+        f'font-family:\'Nunito Sans\',sans-serif; font-size:1.0625rem; font-weight:800; letter-spacing:-0.005em;">'
+        f'{icone_retencao} Retenção e exclusão de dados</h3>',
+        unsafe_allow_html=True,
+    )
+    st.caption(
+        "Para atender pedidos de titular (direito de exclusão da LGPD). Localize um "
+        "atestado pelo código e escolha anonimizar (remove nome e CID, mantém o "
+        "registro) ou excluir definitivamente (apaga tudo, sem volta)."
+    )
+
+    dias_config = dias_retencao_atestados_configurados()
+    if dias_config > 0:
+        st.info(
+            f"Retenção automática: LIGADA — atestados emitidos há mais de {dias_config} "
+            f"dia(s) são anonimizados automaticamente (variável ATESTADO_RETENTION_DAYS)."
+        )
+    else:
+        st.info(
+            "Retenção automática: DESLIGADA (padrão). Nenhum atestado é anonimizado ou "
+            "excluído sozinho — só por ação manual aqui nesta tela."
+        )
+
+    st.write("")
+    codigo_busca = st.text_input(
+        "Código do atestado",
+        key="retencao_codigo_busca",
+        placeholder="Cole aqui o código do atestado (o mesmo usado na URL de verificação)",
+    )
+    codigo_normalizado = codigo_busca.strip()
+
+    if codigo_normalizado:
+        atestado = buscar_atestado_por_codigo(codigo_normalizado)
+        if not atestado:
+            st.error("Nenhum atestado encontrado com esse código.")
+        else:
+            status_atual = atestado.get("status") or "ativo"
+            with st.container(border=True):
+                col1, col2 = st.columns(2)
+                with col1:
+                    _campo_dado("Médico", atestado["nome_medico"])
+                    _campo_dado("CRM", atestado["crm"])
+                    _campo_dado("Data de emissão", atestado["data_emissao"])
+                with col2:
+                    _campo_dado("Paciente", atestado["nome_paciente"] or "[dados já removidos]")
+                    _campo_cid_protegido()
+                    _campo_dado("Status atual", _RÓTULOS_STATUS_ATESTADO.get(status_atual, status_atual))
+
+            st.write("")
+
+            if status_atual != "anonimizado":
+                if st.button(
+                    "Anonimizar (remover nome e CID)",
+                    key="btn_anonimizar_retencao",
+                    type="secondary",
+                ):
+                    st.session_state["retencao_confirmar_anonimizar_codigo"] = codigo_normalizado
+                    st.rerun()
+
+                if st.session_state.get("retencao_confirmar_anonimizar_codigo") == codigo_normalizado:
+                    st.warning(
+                        f"Confirma a anonimização do atestado `{codigo_normalizado}`? O nome do "
+                        "paciente e o CID serão removidos permanentemente — o registro (código, "
+                        "datas, período, status) continua existindo. Esta ação não pode ser desfeita."
+                    )
+                    col_conf, col_canc = st.columns(2)
+                    with col_conf:
+                        if st.button(
+                            "Sim, anonimizar",
+                            key="confirmar_anonimizar_sim",
+                            type="primary",
+                            use_container_width=True,
+                        ):
+                            anonimizar_atestado_manual(
+                                codigo_normalizado,
+                                ator_usuario=admin["usuario"],
+                                ator_perfil="admin",
+                                origem=ORIGEM_PAINEL_ADMIN,
+                            )
+                            st.session_state.pop("retencao_confirmar_anonimizar_codigo", None)
+                            st.success("Atestado anonimizado com sucesso.")
+                            st.rerun()
+                    with col_canc:
+                        if st.button(
+                            "Cancelar",
+                            key="confirmar_anonimizar_nao",
+                            type="secondary",
+                            use_container_width=True,
+                        ):
+                            st.session_state.pop("retencao_confirmar_anonimizar_codigo", None)
+                            st.rerun()
+            else:
+                st.info("Este atestado já está anonimizado. Só resta a opção de exclusão definitiva.")
+
+            st.write("")
+            st.divider()
+            st.markdown(
+                f'<p style="color:{COR_SECUNDARIA}; font-weight:800; font-family:\'Nunito Sans\',sans-serif; '
+                f'font-size:0.875rem; letter-spacing:0.02em; text-transform:uppercase;">Zona de risco</p>',
+                unsafe_allow_html=True,
+            )
+            if st.button("Excluir definitivamente", key="btn_excluir_retencao", type="secondary"):
+                st.session_state["retencao_confirmar_exclusao_codigo"] = codigo_normalizado
+                st.rerun()
+
+            if st.session_state.get("retencao_confirmar_exclusao_codigo") == codigo_normalizado:
+                st.error(
+                    f"Isto apaga o atestado `{codigo_normalizado}` PERMANENTEMENTE do banco de "
+                    "dados — sem qualquer possibilidade de recuperação, nem mesmo pelo suporte "
+                    "técnico. Só a trilha de auditoria manterá o registro de que este código "
+                    "existiu e foi excluído. Para confirmar, digite o código do atestado abaixo."
+                )
+                confirmacao_texto = st.text_input(
+                    "Digite o código do atestado para confirmar a exclusão",
+                    key="retencao_confirmar_exclusao_texto",
+                )
+                pode_confirmar = confirmacao_texto.strip() == codigo_normalizado
+                col_conf2, col_canc2 = st.columns(2)
+                with col_conf2:
+                    if st.button(
+                        "Sim, excluir definitivamente",
+                        key="confirmar_exclusao_sim",
+                        type="primary",
+                        use_container_width=True,
+                        disabled=not pode_confirmar,
+                    ):
+                        excluir_atestado_manual(
+                            codigo_normalizado,
+                            ator_usuario=admin["usuario"],
+                            ator_perfil="admin",
+                            origem=ORIGEM_PAINEL_ADMIN,
+                        )
+                        st.session_state.pop("retencao_confirmar_exclusao_codigo", None)
+                        st.session_state.pop("retencao_confirmar_exclusao_texto", None)
+                        st.session_state.pop("retencao_codigo_busca", None)
+                        st.success("Atestado excluído definitivamente.")
+                        st.rerun()
+                with col_canc2:
+                    if st.button(
+                        "Cancelar",
+                        key="confirmar_exclusao_nao",
+                        type="secondary",
+                        use_container_width=True,
+                    ):
+                        st.session_state.pop("retencao_confirmar_exclusao_codigo", None)
+                        st.session_state.pop("retencao_confirmar_exclusao_texto", None)
+                        st.rerun()
+
+    _rodape()
+
+
+# ---------------------------------------------------------------------------
 # TELA 4 — Dashboard do médico
 # ---------------------------------------------------------------------------
 
@@ -1916,7 +2152,7 @@ def tela_dashboard() -> None:
     atestados_filtrados = atestados
     if busca.strip():
         termo = busca.strip().lower()
-        atestados_filtrados = [a for a in atestados if termo in a["nome_paciente"].lower()]
+        atestados_filtrados = [a for a in atestados if a["nome_paciente"] and termo in a["nome_paciente"].lower()]
 
     if not atestados:
         st.info("Nenhum atestado emitido ainda. Use o formulário acima para criar o primeiro.")
@@ -1936,11 +2172,19 @@ def tela_dashboard() -> None:
                     st.markdown(
                         f'<div style="font-family:\'Nunito Sans\',sans-serif;">'
                         f'<span style="font-size:1rem; font-weight:700; color:{COR_TEXTO}; letter-spacing:-0.005em;">'
-                        f'{html.escape(a["nome_paciente"])}</span></div>',
+                        f'{html.escape(a["nome_paciente"] or "[dados removidos]")}</span></div>',
                         unsafe_allow_html=True,
                     )
                 with col_b:
-                    if status_atestado == "revogado":
+                    if status_atestado == "anonimizado":
+                        st.markdown(
+                            f'<span style="background:{COR_NEUTRA_FUNDO}; color:{COR_NEUTRA}; '
+                            f'padding:0.25rem 0.625rem; border-radius:20px; font-size:0.75rem; font-weight:700; '
+                            f'font-family:\'Nunito Sans\',sans-serif; letter-spacing:0.02em;">'
+                            f'Dados removidos</span>',
+                            unsafe_allow_html=True,
+                        )
+                    elif status_atestado == "revogado":
                         st.markdown(
                             f'<span style="background:#FBEAEA; color:{COR_SECUNDARIA}; '
                             f'padding:0.25rem 0.625rem; border-radius:20px; font-size:0.75rem; font-weight:700; '
@@ -1957,7 +2201,7 @@ def tela_dashboard() -> None:
                         )
 
                 col_1, col_2, col_3, col_4 = st.columns(4)
-                col_1.markdown(f"**CID**  \n{a['cid']}")
+                col_1.markdown(f"**CID**  \n{a['cid'] or '—'}")
                 col_2.markdown(f"**Emissão**  \n{a['data_emissao']}")
                 col_3.markdown(f"**Período**  \n{_formatar_periodo(a)}")
                 col_4.markdown(f"**Código**  \n`{codigo_atestado[:8]}…`")
@@ -1965,7 +2209,21 @@ def tela_dashboard() -> None:
                 chave_toggle = f"mostrar_qr_{codigo_atestado}"
                 url = f"{_url_base()}?codigo={codigo_atestado}"
 
-                if status_atestado == "revogado":
+                if status_atestado == "anonimizado":
+                    col_btn1, col_btn2 = st.columns(2)
+                    with col_btn1:
+                        rotulo_qr = "Ocultar QR" if st.session_state.get(chave_toggle) else "Ver QR"
+                        if st.button(rotulo_qr, key=f"btn_qr_{codigo_atestado}", use_container_width=True, type="secondary"):
+                            st.session_state[chave_toggle] = not st.session_state.get(chave_toggle, False)
+                    with col_btn2:
+                        _botao_copiar_link(url, chave=codigo_atestado)
+                    icone_info = _svg("info", 13, COR_NEUTRA, "margin-right:0.3rem; vertical-align:middle")
+                    st.markdown(
+                        f'<p style="color:{COR_NEUTRA}; font-size:0.82rem; font-weight:600; margin-top:0.5rem;">'
+                        f'{icone_info} Dados pessoais removidos (anonimizado)</p>',
+                        unsafe_allow_html=True,
+                    )
+                elif status_atestado == "revogado":
                     col_btn1, col_btn2 = st.columns(2)
                     with col_btn1:
                         rotulo_qr = "Ocultar QR" if st.session_state.get(chave_toggle) else "Ver QR"
@@ -2038,7 +2296,7 @@ def tela_dashboard() -> None:
                     qr_mini = gerar_qr(url, tamanho_caixa=6, borda=2)
                     col_vazia1, col_qr_meio, col_vazia2 = st.columns([1, 1, 1])
                     with col_qr_meio:
-                        st.image(qr_mini, caption=f"QR — {a['nome_paciente']}", use_container_width=True)
+                        st.image(qr_mini, caption=f"QR — {a['nome_paciente'] or codigo_atestado}", use_container_width=True)
 
     st.write("")
     st.divider()

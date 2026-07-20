@@ -28,6 +28,7 @@ from src.audit import limpar_eventos_antigos
 from src.auth import semear_usuarios_iniciais
 from src.database import init_db
 from src.api import obter_qr_code, registrar_atestado
+from src.retencao import aplicar_retencao_automatica
 from src.mcp_server import mcp_endpoint
 from src.oauth_server import (
     autorizar,
@@ -105,6 +106,24 @@ def _loop_limpeza_auditoria() -> None:
 
 
 threading.Thread(target=_loop_limpeza_auditoria, daemon=True, name="limpeza-auditoria").start()
+
+# Retenção/exclusão de dados dos atestados (LGPD/segurança, parte 4):
+# ATESTADO_RETENTION_DAYS é opt-in e vem DESLIGADA por padrão — se ausente,
+# aplicar_retencao_automatica() não faz nada. Quando ligada, só anonimiza
+# (nunca exclui), na subida (cobre reinícios/deploys) e depois a cada 24h em
+# segundo plano — ver src/retencao.py. Nunca levanta exceção.
+aplicar_retencao_automatica()
+
+_INTERVALO_RETENCAO_ATESTADOS_SEGUNDOS = 24 * 60 * 60
+
+
+def _loop_retencao_atestados() -> None:
+    while True:
+        _time.sleep(_INTERVALO_RETENCAO_ATESTADOS_SEGUNDOS)
+        aplicar_retencao_automatica()
+
+
+threading.Thread(target=_loop_retencao_atestados, daemon=True, name="retencao-atestados").start()
 
 _SCRIPT_PATH = str(Path(__file__).resolve().parent / "app.py")
 

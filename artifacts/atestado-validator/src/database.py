@@ -607,6 +607,65 @@ def listar_atestados_por_crm(crm: str) -> list[dict]:
     return [_descriptografar_atestado(r) for r in rows]
 
 
+def anonimizar_atestado(codigo: str) -> bool:
+    """
+    Remove os dados sensíveis (nome_paciente, cid) de um atestado, mantendo os
+    campos operacionais (código, datas, período, status anterior é
+    substituído por 'anonimizado'). Usada tanto pela ferramenta manual do
+    admin (pedido de exclusão do titular, LGPD) quanto pela retenção
+    automática opt-in — ver src/retencao.py, que decide QUANDO chamar isto e
+    grava o evento de auditoria (aqui é só o UPDATE).
+
+    Idempotente: não faz nada se o atestado já estiver anonimizado. Retorna
+    True se anonimizou agora, False se não encontrado ou já anonimizado.
+
+    Usa string vazia (não NULL) em nome_paciente/cid — as colunas têm
+    restrição NOT NULL desde a criação da tabela; string vazia é "falsy" em
+    Python, então o restante do app (dashboard, verificação pública) já
+    trata isso como "sem dado", sem precisar de nenhum tratamento especial.
+    """
+    sql = """
+        UPDATE atestados
+        SET nome_paciente = '', cid = '', cifrado = 0, status = 'anonimizado'
+        WHERE codigo = ? AND status != 'anonimizado'
+    """
+    with _conectar() as conn:
+        cursor = conn.execute(sql, (codigo,))
+        conn.commit()
+        return cursor.rowcount > 0
+
+
+def excluir_atestado_definitivamente(codigo: str) -> bool:
+    """
+    Remove PERMANENTEMENTE um atestado do banco — sem recuperação possível.
+    Usada só pela ferramenta manual do admin (pedido de exclusão do
+    titular). Retorna True se algum registro foi apagado.
+    """
+    with _conectar() as conn:
+        cursor = conn.execute("DELETE FROM atestados WHERE codigo = ?", (codigo,))
+        conn.commit()
+        return cursor.rowcount > 0
+
+
+def listar_codigos_atestados_para_retencao(dias_retencao: int) -> list[str]:
+    """
+    Retorna os códigos de atestados emitidos há mais de `dias_retencao` dias
+    (com base em `data_emissao`) e ainda não anonimizados — usada só pela
+    retenção automática opt-in (src/retencao.py) para decidir o que
+    anonimizar. Nunca inclui atestados já anonimizados (evita reprocessar).
+    """
+    modificador = f"-{int(dias_retencao)} days"
+    sql = """
+        SELECT codigo FROM atestados
+        WHERE status != 'anonimizado'
+              AND data_emissao IS NOT NULL
+              AND date(data_emissao) < date('now', 'localtime', ?)
+    """
+    with _conectar() as conn:
+        rows = conn.execute(sql, (modificador,)).fetchall()
+    return [r["codigo"] for r in rows]
+
+
 def revogar_atestado(codigo: str, crm: str) -> bool:
     """
     Marca um atestado como 'revogado' com a data/hora atual.

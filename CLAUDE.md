@@ -51,6 +51,13 @@ veredito de "fraude confirmada".
   falha ao subir (fail-closed) se estiver ausente ou inválida.
 - **`AUDIT_RETENTION_DAYS`** (opcional) — quantos dias manter os eventos da trilha
   de auditoria antes de serem apagados automaticamente; padrão 365 dias se ausente/inválida.
+- **`ATESTADO_RETENTION_DAYS`** (opcional, **DESLIGADA por padrão**) — retenção
+  automática dos ATESTADOS (não confundir com `AUDIT_RETENTION_DAYS`, que é só da
+  trilha de auditoria). Se ausente/vazia/0/inválida, nada é apagado nem anonimizado
+  automaticamente — o prazo de guarda de registro médico é decisão jurídica, então a
+  automação só liga com essa variável definida explicitamente. Se definida com um
+  número de dias > 0, ANONIMIZA (nunca exclui) os atestados emitidos há mais tempo
+  que esse prazo, na subida do processo e a cada 24h.
 
 ## 3. Funcionalidades já implementadas
 - **Login seguro:** perfis **admin** e **médico**, senhas com **hash (bcrypt)**,
@@ -67,6 +74,22 @@ veredito de "fraude confirmada".
 - **Segurança/LGPD — Parte 3 (auditoria), concluída:** trilha de auditoria registra
   eventos relevantes (login, emissão, revogação, ações de admin), com tela própria
   no painel do admin para consulta e retenção configurável (`AUDIT_RETENTION_DAYS`).
+- **Segurança/LGPD — Parte 4 (retenção/exclusão de atestados), concluída:**
+  - **Anonimizar:** remove nome do paciente e CID de um atestado, mantendo código,
+    datas, período e status (`anonimizado`). A página pública de um atestado
+    anonimizado indica que o registro existiu mas os dados pessoais foram
+    removidos, sem quebrar.
+  - **Ferramenta manual (só admin)**, tela "Retenção/Exclusão" no painel: localizar
+    um atestado pelo código e ANONIMIZAR ou EXCLUIR definitivamente (com
+    confirmação explícita — excluir exige digitar o código de novo). Pensada para
+    atender pedidos de titular (direito de exclusão da LGPD). Ambas as ações vão
+    para a trilha de auditoria, só com o código do atestado.
+  - **Retenção automática, opt-in, DESLIGADA por padrão** (`ATESTADO_RETENTION_DAYS`
+    — ver seção de variáveis de ambiente): só anonimiza (nunca exclui), e só se a
+    variável for definida explicitamente.
+  - Implementação: `src/retencao.py` (regras de negócio, nunca derruba a
+    aplicação) + funções novas em `src/database.py` + eventos novos em
+    `src/audit.py`.
 - **Emissão por formulário:** paciente, CID, data de emissão, período/dias. Médico vem da sessão.
 - **Geração de QR:** código aleatório único; URL de verificação; imagem PNG pública em
   `/atestados/{codigo}/qrcode.png` (com CORS, sem login, cacheável).
@@ -112,9 +135,8 @@ Numa conversa da Claude com os conectores **"AmorSaude Validação" (MCP)** + **
 ## 6. Decisões e restrições importantes
 - Ferramenta de **apoio**, nunca "fraude confirmada".
 - **LGPD:** CID protegido na página pública; CPF não vai para a verificação. Endurecimento
-  de LGPD já concluído em **três partes**: Parte 1 (acesso/login), Parte 2 (criptografia
-  em repouso) e Parte 3 (auditoria) — ver seção 3. **Falta a Parte 4** (retenção/exclusão
-  de atestados), ver backlog.
+  de LGPD concluído em **quatro partes**: Parte 1 (acesso/login), Parte 2 (criptografia
+  em repouso), Parte 3 (auditoria) e Parte 4 (retenção/exclusão de atestados) — ver seção 3.
 - Código do QR deve ser **aleatório e imprevisível** (evitar enumeração/vazamento).
 - URLs geradas (OAuth redirect, base do QR/verificação) são **dinâmicas** (baseadas no
   domínio da requisição), para funcionar em localhost e em produção sem hardcode.
@@ -128,7 +150,6 @@ Numa conversa da Claude com os conectores **"AmorSaude Validação" (MCP)** + **
 
 ## 8. Próximos passos / backlog
 - **Fluxo Canva:** duplicar o template por ficha (não sobrescrever o original).
-- **Segurança/LGPD — Parte 4 (retenção/exclusão de atestados):** ainda não implementada.
 - **Visual da página pública de verificação:** cabeçalho, logo clicável, e código de
   autenticação com botão de copiar — ainda pendente.
 - **Verificação real do CRM junto ao CFM:** fica para mais adiante.

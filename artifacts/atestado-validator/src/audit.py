@@ -45,6 +45,9 @@ EVENTO_MEDICO_ATIVADO = "medico_ativado"
 EVENTO_MEDICO_DESATIVADO = "medico_desativado"
 EVENTO_SENHA_REDEFINIDA_ADMIN = "senha_redefinida_por_admin"
 EVENTO_SENHA_TROCADA_PROPRIA = "senha_trocada_propria"
+# Retenção/exclusão de dados (LGPD/segurança, parte 4) — ver src/retencao.py.
+EVENTO_ATESTADO_ANONIMIZADO = "atestado_anonimizado"
+EVENTO_ATESTADO_EXCLUIDO = "atestado_excluido"
 
 TODOS_OS_TIPOS_DE_EVENTO = [
     EVENTO_ATESTADO_EMITIDO,
@@ -57,6 +60,8 @@ TODOS_OS_TIPOS_DE_EVENTO = [
     EVENTO_MEDICO_DESATIVADO,
     EVENTO_SENHA_REDEFINIDA_ADMIN,
     EVENTO_SENHA_TROCADA_PROPRIA,
+    EVENTO_ATESTADO_ANONIMIZADO,
+    EVENTO_ATESTADO_EXCLUIDO,
 ]
 
 # Rótulos em português para exibir na tela de auditoria (select de filtro e lista de eventos).
@@ -71,6 +76,8 @@ RÓTULOS_TIPOS_DE_EVENTO = {
     EVENTO_MEDICO_DESATIVADO: "Médico desativado",
     EVENTO_SENHA_REDEFINIDA_ADMIN: "Senha redefinida pelo admin",
     EVENTO_SENHA_TROCADA_PROPRIA: "Senha trocada (pela própria conta)",
+    EVENTO_ATESTADO_ANONIMIZADO: "Atestado anonimizado",
+    EVENTO_ATESTADO_EXCLUIDO: "Atestado excluído definitivamente",
 }
 
 # Origens conhecidas de uma ação — de onde ela partiu.
@@ -78,6 +85,8 @@ ORIGEM_FORMULARIO = "formulario"
 ORIGEM_API = "api"
 ORIGEM_MCP = "mcp"
 ORIGEM_PAINEL_ADMIN = "painel_admin"
+# Retenção automática opt-in (ATESTADO_RETENTION_DAYS) — ver src/retencao.py.
+ORIGEM_RETENCAO_AUTOMATICA = "retencao_automatica"
 
 _RETENCAO_PADRAO_DIAS = 365
 
