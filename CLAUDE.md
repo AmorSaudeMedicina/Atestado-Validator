@@ -29,19 +29,44 @@ veredito de "fraude confirmada".
   (conector para a Claude) e o endpoint público da imagem do QR.
 - **Banco de dados SQLite** (persistente).
 - Geração de QR Code (biblioteca `qrcode`).
-- **Hospedagem atual:** Replit, em **Reserved VM** (instância única, sempre ligada),
-  em `https://atestado-validator.replit.app`.
+- **Hospedagem atual:** **GitHub + Railway** (deploy a partir do repositório no GitHub),
+  instância única sempre ligada, em produção em
+  `https://atestado-validator-production.up.railway.app`.
 
 > IMPORTANTE (hospedagem): o app **precisa rodar como instância única sempre-ligada**
-> por causa do SQLite. Em Autoscale/multi-instância o banco fica inconsistente
-> (cada instância tem seu próprio SQLite). Se for re-hospedar fora do Replit,
-> use um serviço single-instance/always-on ou migre o banco para um Postgres gerenciado.
+> por causa do SQLite. Em cenário multi-instância o banco fica inconsistente
+> (cada instância teria seu próprio SQLite). Se um dia crescer além de uma
+> instância, migre o banco para um Postgres gerenciado.
+
+### Variáveis de ambiente (Railway, produção)
+- **`DATA_DIR`** — diretório persistente (ex.: um Volume do Railway) onde fica o
+  arquivo `atestados.db`, para o banco sobreviver a redeploys.
+- **`ADMIN_INITIAL_PASSWORD`** — senha da conta `admin` inicial na primeira subida;
+  se ausente, o app gera uma senha aleatória forte e a escreve uma única vez no
+  log de inicialização (nunca fica hardcoded no código).
+- **`SEED_TEST_DATA`** — só deve ser `"true"` em ambiente de teste/local; quando
+  definida, cria médicos de teste com senhas fracas conhecidas. **Nunca definir em produção.**
+- **`ENCRYPTION_KEY`** — chave simétrica (Fernet) usada para criptografar em repouso
+  os dados sensíveis dos atestados (nome do paciente, CID); obrigatória — o processo
+  falha ao subir (fail-closed) se estiver ausente ou inválida.
+- **`AUDIT_RETENTION_DAYS`** (opcional) — quantos dias manter os eventos da trilha
+  de auditoria antes de serem apagados automaticamente; padrão 365 dias se ausente/inválida.
 
 ## 3. Funcionalidades já implementadas
 - **Login seguro:** perfis **admin** e **médico**, senhas com **hash (bcrypt)**,
   sessões, telas protegidas, "fail-closed".
 - **Painel do admin:** criar/listar médicos, **ativar/desativar**, **redefinir senha**.
-  Admin inicial: usuário `admin` / senha `AdminAmor@2026` (protótipo — trocar em produção).
+  Admin inicial criado a partir de `ADMIN_INITIAL_PASSWORD` (ou senha aleatória forte
+  gerada no primeiro boot, ver seção de variáveis de ambiente).
+- **Segurança/LGPD — Parte 1 (acesso/login), concluída:** nenhuma credencial aparece
+  na tela, exigência de senha forte, bloqueio de conta por tentativas de login
+  incorretas, expiração de sessão, e troca de senha obrigatória no primeiro login do admin.
+- **Segurança/LGPD — Parte 2 (criptografia), concluída:** dados sensíveis dos atestados
+  (nome do paciente, CID) são criptografados em repouso no banco (Fernet, chave em
+  `ENCRYPTION_KEY`).
+- **Segurança/LGPD — Parte 3 (auditoria), concluída:** trilha de auditoria registra
+  eventos relevantes (login, emissão, revogação, ações de admin), com tela própria
+  no painel do admin para consulta e retenção configurável (`AUDIT_RETENTION_DAYS`).
 - **Emissão por formulário:** paciente, CID, data de emissão, período/dias. Médico vem da sessão.
 - **Geração de QR:** código aleatório único; URL de verificação; imagem PNG pública em
   `/atestados/{codigo}/qrcode.png` (com CORS, sem login, cacheável).
@@ -54,8 +79,8 @@ veredito de "fraude confirmada".
   retorna código + URL de verificação + link da imagem do QR.
 - **Conector MCP (para a Claude):** autenticação **OAuth 2.0** (Dynamic Client
   Registration + Authorization Code + PKCE). URL do conector:
-  `https://atestado-validator.replit.app/mcp`. Expõe a ferramenta **`registrar_atestado`**.
-  O médico faz login com as credenciais do Portal ao conectar.
+  `https://atestado-validator-production.up.railway.app/mcp`. Expõe a ferramenta
+  **`registrar_atestado`**. O médico faz login com as credenciais do Portal ao conectar.
 
 ## 4. Design / identidade visual (AmorSaúde)
 - **Paleta:** verde-água/teal `#5FC2D4` (principal), coral `#D74846` (secundária),
@@ -86,9 +111,10 @@ Numa conversa da Claude com os conectores **"AmorSaude Validação" (MCP)** + **
 
 ## 6. Decisões e restrições importantes
 - Ferramenta de **apoio**, nunca "fraude confirmada".
-- **LGPD:** CID protegido na página pública; CPF não vai para a verificação; endurecimento
-  completo de LGPD (base legal, retenção, criptografia, logs de auditoria) foi **adiado de
-  propósito** até o uso real. **Enquanto isso, usar apenas dados fictícios/de teste.**
+- **LGPD:** CID protegido na página pública; CPF não vai para a verificação. Endurecimento
+  de LGPD já concluído em **três partes**: Parte 1 (acesso/login), Parte 2 (criptografia
+  em repouso) e Parte 3 (auditoria) — ver seção 3. **Falta a Parte 4** (retenção/exclusão
+  de atestados), ver backlog.
 - Código do QR deve ser **aleatório e imprevisível** (evitar enumeração/vazamento).
 - URLs geradas (OAuth redirect, base do QR/verificação) são **dinâmicas** (baseadas no
   domínio da requisição), para funcionar em localhost e em produção sem hardcode.
@@ -102,9 +128,10 @@ Numa conversa da Claude com os conectores **"AmorSaude Validação" (MCP)** + **
 
 ## 8. Próximos passos / backlog
 - **Fluxo Canva:** duplicar o template por ficha (não sobrescrever o original).
-- **Segurança/LGPD para uso real:** retenção, criptografia, logs de auditoria, verificação
-  real do CRM junto ao CFM, confirmação por e-mail, recuperação de senha.
-- **Re-hospedagem** (se sair do Replit): serviço single-instance/always-on ou Postgres gerenciado.
+- **Segurança/LGPD — Parte 4 (retenção/exclusão de atestados):** ainda não implementada.
+- **Visual da página pública de verificação:** cabeçalho, logo clicável, e código de
+  autenticação com botão de copiar — ainda pendente.
+- **Verificação real do CRM junto ao CFM:** fica para mais adiante.
 - **Design:** continuar lapidando (a rodada feita cobriu ícones, tipografia, espaçamento,
   microinterações, cor e mobile).
 - **Atestado final em PDF** com o QR embutido (era um recurso planejado para "mais pra frente").
