@@ -134,9 +134,10 @@ Numa conversa da Claude com os conectores **"AmorSaude Validação" (MCP)** + **
 
 ## 6. Decisões e restrições importantes
 - Ferramenta de **apoio**, nunca "fraude confirmada".
-- **LGPD:** CID protegido na página pública; CPF não vai para a verificação. Endurecimento
-  de LGPD concluído em **quatro partes**: Parte 1 (acesso/login), Parte 2 (criptografia
-  em repouso), Parte 3 (auditoria) e Parte 4 (retenção/exclusão de atestados) — ver seção 3.
+- **LGPD:** CID protegido na página pública; CPF não vai para a verificação. Frente de
+  **Segurança/LGPD CONCLUÍDA** (Partes 1-4): Parte 1 (acesso/login), Parte 2
+  (criptografia em repouso), Parte 3 (auditoria) e Parte 4 (retenção/exclusão de
+  atestados) — ver seção 3. Não há parte pendente nesta frente.
 - Código do QR deve ser **aleatório e imprevisível** (evitar enumeração/vazamento).
 - URLs geradas (OAuth redirect, base do QR/verificação) são **dinâmicas** (baseadas no
   domínio da requisição), para funcionar em localhost e em produção sem hardcode.
@@ -152,7 +153,6 @@ Numa conversa da Claude com os conectores **"AmorSaude Validação" (MCP)** + **
 - **Fluxo Canva:** duplicar o template por ficha (não sobrescrever o original).
 - **Visual da página pública de verificação:** cabeçalho, logo clicável, e código de
   autenticação com botão de copiar — ainda pendente.
-- **Verificação real do CRM junto ao CFM:** fica para mais adiante.
 - **Design:** continuar lapidando (a rodada feita cobriu ícones, tipografia, espaçamento,
   microinterações, cor e mobile).
 - **Atestado final em PDF** com o QR embutido (era um recurso planejado para "mais pra frente").
