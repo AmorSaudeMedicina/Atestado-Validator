@@ -178,7 +178,10 @@ def trocar_codigo_por_token(code: str, code_verifier: str, redirect_uri: str, co
         timeout=15,
     )
     if resposta.status_code != 200:
-        raise ErroCanva(f"Canva recusou a troca do código de autorização (status {resposta.status_code}).")
+        raise ErroCanva(
+            f"Canva recusou a troca do código de autorização (status {resposta.status_code}): "
+            f"{resposta.text[:500]} | redirect_uri enviado: {redirect_uri}"
+        )
     _gravar_tokens(resposta.json(), conectado_por=conectado_por)
 
 
@@ -213,7 +216,7 @@ def _obter_access_token_valido() -> str:
     )
     if resposta.status_code != 200:
         raise ErroCanva(
-            f"Falha ao renovar o token do Canva (status {resposta.status_code}). "
+            f"Falha ao renovar o token do Canva (status {resposta.status_code}): {resposta.text[:500]}. "
             "Pode ser necessário reconectar em /admin/canva/conectar."
         )
     dados = resposta.json()
