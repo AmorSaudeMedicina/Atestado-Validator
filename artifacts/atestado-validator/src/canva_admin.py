@@ -19,10 +19,11 @@ navegador — a autorização substitui automaticamente o token anterior
 from __future__ import annotations
 
 import html
+import os
 import secrets
 
 from starlette.requests import Request
-from starlette.responses import HTMLResponse, RedirectResponse, Response
+from starlette.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 
 from src.audit import EVENTO_CANVA_CONECTADO, ORIGEM_PAINEL_ADMIN, registrar_evento
 from src.auth import autenticar
@@ -184,4 +185,21 @@ async def callback_canva(request: Request) -> Response:
         "O servidor foi autorizado com sucesso. A partir de agora, atestados emitidos com o CPF do "
         "paciente preenchido geram o PDF automaticamente. Você já pode fechar esta janela.",
         sucesso=True,
+    )
+
+
+async def debug_version(request: Request) -> Response:
+    """
+    GET /admin/canva/debug-version — rota de DIAGNÓSTICO TEMPORÁRIA, criada só
+    para investigar um problema de deploy em que as rotas novas do Canva não
+    estavam sendo alcançadas em produção (caindo no fallback estático do
+    Streamlit). Sem autenticação — não expõe nada sensível, só um marcador
+    textual fixo e o SHA do commit (se a plataforma o expuser via env var).
+    Remover depois que o problema estiver resolvido.
+    """
+    return JSONResponse(
+        {
+            "marcador": "TESTE-V2-CANVA",
+            "commit_railway_git_sha": os.environ.get("RAILWAY_GIT_COMMIT_SHA", "desconhecido"),
+        }
     )
