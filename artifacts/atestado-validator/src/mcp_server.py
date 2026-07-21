@@ -81,6 +81,14 @@ _FERRAMENTA_REGISTRAR_ATESTADO = {
                 "type": "string",
                 "description": "Data de fim do afastamento, formato AAAA-MM-DD (usar junto com data_inicio).",
             },
+            "cpf": {
+                "type": "string",
+                "description": (
+                    "CPF do paciente (opcional). NUNCA é salvo no registro do atestado — usado "
+                    "só para preencher automaticamente o PDF do atestado gerado via Canva em "
+                    "segundo plano. Sem este campo, nenhum PDF é gerado."
+                ),
+            },
         },
         "required": ["nome_paciente", "cid", "data_emissao"],
     },

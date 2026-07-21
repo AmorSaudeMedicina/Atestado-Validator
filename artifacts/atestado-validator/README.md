@@ -119,3 +119,9 @@ definida) e escuta em `0.0.0.0`. O deploy no Railway usa o `Dockerfile` na
 raiz do repositório — ver `railway.toml` e a seção "Deploy no Railway" no
 `CLAUDE.md`/mensagem do assistente para o caminho do volume persistente do
 banco SQLite (`DATA_DIR`).
+
+Geração automática do PDF do atestado via Canva: exige uma autorização única
+de um administrador em `/admin/canva/conectar` (link no painel do admin) e as
+variáveis `CANVA_CLIENT_ID`/`CANVA_CLIENT_SECRET` — passo a passo completo,
+incluindo o aviso de **reautorizar ao trocar de conta do Canva**, na seção 5
+do `CLAUDE.md`.

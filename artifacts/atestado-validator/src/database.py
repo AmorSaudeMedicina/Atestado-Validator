@@ -168,6 +168,69 @@ _CREATE_INDICES_AUDITORIA = (
     "CREATE INDEX IF NOT EXISTS idx_auditoria_tipo ON eventos_auditoria(tipo_evento)",
 )
 
+# ---------------------------------------------------------------------------
+# Documento PDF do atestado (gerado via Canva) — ver src/canva_client.py.
+#
+# Uma linha por atestado, criada quando a geração do PDF é disparada
+# (emissão pelo formulário, API ou MCP) e atualizada quando o job em segundo
+# plano termina. `status`: 'gerando' | 'pronto' | 'falhou'. Se a geração
+# nunca foi disparada para um atestado (ex.: emitido antes desta
+# funcionalidade existir, ou sem CPF informado), simplesmente não há linha —
+# o dashboard trata "sem linha" como "documento não disponível", sem erro.
+#
+# `caminho_arquivo` aponta para um PDF gravado em DATA_DIR, cifrado em
+# repouso com a mesma ENCRYPTION_KEY (ver src/crypto.py) — o PDF carrega
+# nome e CPF do paciente em claro dentro do próprio documento, então merece
+# o mesmo cuidado já dado a nome_paciente/cid no banco.
+# ---------------------------------------------------------------------------
+
+_CREATE_DOCUMENTOS_ATESTADO = """
+CREATE TABLE IF NOT EXISTS documentos_atestado (
+    codigo          TEXT PRIMARY KEY,
+    status          TEXT NOT NULL DEFAULT 'gerando' CHECK (status IN ('gerando','pronto','falhou')),
+    caminho_arquivo TEXT,
+    erro            TEXT,
+    tentativas      INTEGER NOT NULL DEFAULT 0,
+    criado_em       TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+    atualizado_em   TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+)
+"""
+
+# ---------------------------------------------------------------------------
+# OAuth do Canva (servidor como CLIENTE, não como emissor) — ver
+# src/canva_client.py. Autorização feita uma única vez pelo admin em
+# /admin/canva/conectar; o token fica guardado aqui, cifrado, para uso e
+# renovação automática em segundo plano (nunca em variável de ambiente, nem
+# em texto puro).
+#
+# `canva_oauth_token` é uma tabela de UMA linha só (id fixo em 1) — só existe
+# uma conexão Canva por vez. `canva_oauth_state` guarda o par
+# state/code_verifier (PKCE) durante a ida-e-volta do navegador para o
+# Canva; cada linha expira em poucos minutos e é consumida uma única vez.
+# ---------------------------------------------------------------------------
+
+_CREATE_CANVA_OAUTH_TOKEN = """
+CREATE TABLE IF NOT EXISTS canva_oauth_token (
+    id                    INTEGER PRIMARY KEY CHECK (id = 1),
+    access_token_cifrado  TEXT NOT NULL,
+    refresh_token_cifrado TEXT NOT NULL,
+    expira_em             TEXT NOT NULL,
+    conectado_por         TEXT,
+    criado_em             TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+    atualizado_em         TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+)
+"""
+
+_CREATE_CANVA_OAUTH_STATE = """
+CREATE TABLE IF NOT EXISTS canva_oauth_state (
+    state         TEXT PRIMARY KEY,
+    code_verifier TEXT NOT NULL,
+    criado_por    TEXT,
+    expira_em     TEXT NOT NULL,
+    criado_em     TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+)
+"""
+
 
 def _conectar() -> sqlite3.Connection:
     """
@@ -218,6 +281,9 @@ def init_db() -> None:
         conn.execute(_CREATE_EVENTOS_AUDITORIA)
         for sql_indice in _CREATE_INDICES_AUDITORIA:
             conn.execute(sql_indice)
+        conn.execute(_CREATE_DOCUMENTOS_ATESTADO)
+        conn.execute(_CREATE_CANVA_OAUTH_TOKEN)
+        conn.execute(_CREATE_CANVA_OAUTH_STATE)
         conn.commit()
 
     migrar_atestados_para_cifrado()
@@ -763,3 +829,145 @@ def limpar_eventos_auditoria_antigos(dias_retencao: int) -> int:
         )
         conn.commit()
         return cursor.rowcount
+
+
+# ---------------------------------------------------------------------------
+# Documento PDF do atestado (Canva) — ver src/canva_client.py.
+# ---------------------------------------------------------------------------
+
+def iniciar_geracao_documento(codigo: str) -> None:
+    """
+    Cria (ou reinicia, se já existir) o registro de geração do PDF de um
+    atestado como 'gerando', incrementando `tentativas`. Chamada tanto na
+    emissão quanto no botão "Tentar novamente" do dashboard — em ambos os
+    casos o job em segundo plano parte do zero.
+    """
+    sql = """
+        INSERT INTO documentos_atestado (codigo, status, tentativas)
+        VALUES (?, 'gerando', 1)
+        ON CONFLICT(codigo) DO UPDATE SET
+            status = 'gerando',
+            erro = NULL,
+            tentativas = tentativas + 1,
+            atualizado_em = datetime('now','localtime')
+    """
+    with _conectar() as conn:
+        conn.execute(sql, (codigo,))
+        conn.commit()
+
+
+def marcar_documento_pronto(codigo: str, caminho_arquivo: str) -> None:
+    """Marca o documento como pronto, com o caminho do PDF cifrado gravado em DATA_DIR."""
+    sql = """
+        UPDATE documentos_atestado
+        SET status = 'pronto', caminho_arquivo = ?, erro = NULL, atualizado_em = datetime('now','localtime')
+        WHERE codigo = ?
+    """
+    with _conectar() as conn:
+        conn.execute(sql, (caminho_arquivo, codigo))
+        conn.commit()
+
+
+def marcar_documento_falhou(codigo: str, erro: str) -> None:
+    """Marca a geração do documento como falha, com uma mensagem curta (nunca dado sensível) para exibir no dashboard."""
+    sql = """
+        UPDATE documentos_atestado
+        SET status = 'falhou', erro = ?, atualizado_em = datetime('now','localtime')
+        WHERE codigo = ?
+    """
+    with _conectar() as conn:
+        conn.execute(sql, (erro, codigo))
+        conn.commit()
+
+
+def buscar_documento(codigo: str) -> Optional[dict]:
+    """Retorna o registro de geração do PDF de um atestado, ou None se nunca foi disparada para esse código."""
+    with _conectar() as conn:
+        row = conn.execute("SELECT * FROM documentos_atestado WHERE codigo = ?", (codigo,)).fetchone()
+    return dict(row) if row else None
+
+
+def remover_registro_documento(codigo: str) -> Optional[str]:
+    """
+    Remove o registro de documento de um atestado (chamada quando o atestado é
+    anonimizado ou excluído — ver src/retencao.py). Retorna o `caminho_arquivo`
+    que estava associado (para o chamador apagar o PDF do disco), ou None se
+    não havia documento gerado.
+    """
+    with _conectar() as conn:
+        row = conn.execute(
+            "SELECT caminho_arquivo FROM documentos_atestado WHERE codigo = ?", (codigo,)
+        ).fetchone()
+        conn.execute("DELETE FROM documentos_atestado WHERE codigo = ?", (codigo,))
+        conn.commit()
+    return row["caminho_arquivo"] if row else None
+
+
+# ---------------------------------------------------------------------------
+# OAuth do Canva (servidor como cliente) — ver src/canva_client.py.
+# ---------------------------------------------------------------------------
+
+def salvar_canva_oauth_token(
+    access_token_cifrado: str,
+    refresh_token_cifrado: str,
+    expira_em_iso: str,
+    conectado_por: Optional[str] = None,
+) -> None:
+    """
+    Grava (substituindo qualquer conexão anterior) o token OAuth do Canva —
+    tabela de uma linha só (id=1). Chamada tanto na autorização inicial
+    quanto a cada renovação automática (o refresh token do Canva é de uso
+    único: cada renovação grava um refresh token novo).
+    """
+    sql = """
+        INSERT INTO canva_oauth_token (id, access_token_cifrado, refresh_token_cifrado, expira_em, conectado_por)
+        VALUES (1, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+            access_token_cifrado = excluded.access_token_cifrado,
+            refresh_token_cifrado = excluded.refresh_token_cifrado,
+            expira_em = excluded.expira_em,
+            conectado_por = COALESCE(excluded.conectado_por, canva_oauth_token.conectado_por),
+            atualizado_em = datetime('now','localtime')
+    """
+    with _conectar() as conn:
+        conn.execute(sql, (access_token_cifrado, refresh_token_cifrado, expira_em_iso, conectado_por))
+        conn.commit()
+
+
+def buscar_canva_oauth_token() -> Optional[dict]:
+    """Retorna a conexão Canva atual (tokens ainda cifrados — decifrar é responsabilidade do chamador), ou None se nunca autorizada."""
+    with _conectar() as conn:
+        row = conn.execute("SELECT * FROM canva_oauth_token WHERE id = 1").fetchone()
+    return dict(row) if row else None
+
+
+def remover_canva_oauth_token() -> None:
+    """Remove a conexão Canva atual — usada quando o admin desconecta explicitamente (ex.: antes de trocar de conta)."""
+    with _conectar() as conn:
+        conn.execute("DELETE FROM canva_oauth_token WHERE id = 1")
+        conn.commit()
+
+
+def criar_canva_oauth_state(state: str, code_verifier: str, criado_por: Optional[str] = None) -> None:
+    """Grava o par state/code_verifier (PKCE) durante a ida-e-volta do navegador para o Canva, válido por 10 minutos."""
+    sql = """
+        INSERT INTO canva_oauth_state (state, code_verifier, criado_por, expira_em)
+        VALUES (?, ?, ?, datetime('now','localtime','+10 minutes'))
+    """
+    with _conectar() as conn:
+        conn.execute(sql, (state, code_verifier, criado_por))
+        conn.commit()
+
+
+def consumir_canva_oauth_state(state: str) -> Optional[dict]:
+    """Busca e remove (uso único) um state ainda válido. Retorna o registro ou None se inexistente/expirado/já usado."""
+    with _conectar() as conn:
+        row = conn.execute(
+            "SELECT * FROM canva_oauth_state WHERE state = ? AND expira_em > datetime('now','localtime')",
+            (state,),
+        ).fetchone()
+        if not row:
+            return None
+        conn.execute("DELETE FROM canva_oauth_state WHERE state = ?", (state,))
+        conn.commit()
+        return dict(row)

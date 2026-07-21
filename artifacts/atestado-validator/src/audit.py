@@ -48,6 +48,10 @@ EVENTO_SENHA_TROCADA_PROPRIA = "senha_trocada_propria"
 # Retenção/exclusão de dados (LGPD/segurança, parte 4) — ver src/retencao.py.
 EVENTO_ATESTADO_ANONIMIZADO = "atestado_anonimizado"
 EVENTO_ATESTADO_EXCLUIDO = "atestado_excluido"
+# Documento PDF via Canva (ver src/canva_client.py).
+EVENTO_CANVA_CONECTADO = "canva_conectado"
+EVENTO_DOCUMENTO_GERADO = "documento_gerado"
+EVENTO_DOCUMENTO_FALHOU = "documento_falhou"
 
 TODOS_OS_TIPOS_DE_EVENTO = [
     EVENTO_ATESTADO_EMITIDO,
@@ -62,6 +66,9 @@ TODOS_OS_TIPOS_DE_EVENTO = [
     EVENTO_SENHA_TROCADA_PROPRIA,
     EVENTO_ATESTADO_ANONIMIZADO,
     EVENTO_ATESTADO_EXCLUIDO,
+    EVENTO_CANVA_CONECTADO,
+    EVENTO_DOCUMENTO_GERADO,
+    EVENTO_DOCUMENTO_FALHOU,
 ]
 
 # Rótulos em português para exibir na tela de auditoria (select de filtro e lista de eventos).
@@ -78,6 +85,9 @@ RÓTULOS_TIPOS_DE_EVENTO = {
     EVENTO_SENHA_TROCADA_PROPRIA: "Senha trocada (pela própria conta)",
     EVENTO_ATESTADO_ANONIMIZADO: "Atestado anonimizado",
     EVENTO_ATESTADO_EXCLUIDO: "Atestado excluído definitivamente",
+    EVENTO_CANVA_CONECTADO: "Canva conectado (admin)",
+    EVENTO_DOCUMENTO_GERADO: "Documento PDF gerado (Canva)",
+    EVENTO_DOCUMENTO_FALHOU: "Documento PDF falhou (Canva)",
 }
 
 # Origens conhecidas de uma ação — de onde ela partiu.
@@ -87,6 +97,10 @@ ORIGEM_MCP = "mcp"
 ORIGEM_PAINEL_ADMIN = "painel_admin"
 # Retenção automática opt-in (ATESTADO_RETENTION_DAYS) — ver src/retencao.py.
 ORIGEM_RETENCAO_AUTOMATICA = "retencao_automatica"
+# Geração de documento via Canva (ver src/canva_client.py) — a primeira
+# tentativa herda a origem da emissão (formulário/API/MCP); um clique manual
+# em "Tentar novamente" no dashboard usa esta origem própria.
+ORIGEM_CANVA_RETRY = "canva_retry"
 
 _RETENCAO_PADRAO_DIAS = 365
 

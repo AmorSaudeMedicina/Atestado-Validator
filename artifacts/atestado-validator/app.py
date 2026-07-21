@@ -33,6 +33,7 @@ from src.audit import (
     EVENTO_MEDICO_DESATIVADO,
     EVENTO_SENHA_REDEFINIDA_ADMIN,
     EVENTO_SENHA_TROCADA_PROPRIA,
+    ORIGEM_CANVA_RETRY,
     ORIGEM_FORMULARIO,
     ORIGEM_PAINEL_ADMIN,
     RÓTULOS_TIPOS_DE_EVENTO,
@@ -41,8 +42,12 @@ from src.audit import (
     registrar_evento,
 )
 from src.auth import autenticar, esta_bloqueado, gerar_hash_senha, semear_usuarios_iniciais, validar_senha_forte
+from src.canva_client import configurado as canva_configurado
+from src.canva_client import conectado as canva_conectado
+from src.canva_client import disparar_geracao_documento, ler_documento
 from src.database import (
     buscar_atestado_por_codigo,
+    buscar_documento,
     buscar_usuario_por_login,
     contar_oauth_access_tokens_ativos,
     criar_usuario,
@@ -1363,6 +1368,88 @@ def _gerar_csv(atestados: list[dict]) -> bytes:
     return buf.getvalue().encode("utf-8-sig")
 
 
+def _secao_documento_pdf(atestado: dict, codigo: str, url_verificacao_atestado: str) -> None:
+    """
+    Mostra o status do documento PDF (gerado via Canva) de um atestado no
+    dashboard: nada (se nunca foi disparado — ex.: emitido sem CPF),
+    "gerando…", botão de baixar (se pronto) ou botão de tentar novamente
+    (se falhou). Ver src/canva_client.py.
+
+    Ao tentar novamente, pede o CPF de novo em vez de reaproveitar algum
+    valor salvo — o CPF nunca é persistido em lugar nenhum (decisão de
+    LGPD), então não há nada para reaproveitar.
+    """
+    documento = buscar_documento(codigo)
+    if not documento:
+        return
+
+    status_documento = documento.get("status")
+    chave_retry_aberto = f"pdf_retry_aberto_{codigo}"
+
+    if status_documento == "gerando":
+        icone_gerando = _svg("file-text", 13, COR_PRIMARIA, "margin-right:0.3rem; vertical-align:middle")
+        st.markdown(
+            f'<p style="color:{COR_PRIMARIA}; font-size:0.82rem; font-weight:600; margin-top:0.5rem;">'
+            f'{icone_gerando} Gerando o PDF do atestado (Canva)… atualize a página em alguns instantes.</p>',
+            unsafe_allow_html=True,
+        )
+        return
+
+    if status_documento == "pronto":
+        pdf_bytes = ler_documento(codigo)
+        if pdf_bytes:
+            st.download_button(
+                "Baixar PDF do atestado",
+                data=pdf_bytes,
+                file_name=f"atestado_{codigo[:12]}.pdf",
+                mime="application/pdf",
+                key=f"baixar_pdf_{codigo}",
+                use_container_width=True,
+                type="secondary",
+            )
+            return
+        # Registro diz "pronto" mas o arquivo sumiu do disco — trata como falha,
+        # oferecendo o mesmo caminho de nova tentativa abaixo.
+        st.caption("O PDF estava pronto, mas o arquivo não foi encontrado no servidor.")
+
+    elif status_documento == "falhou":
+        st.caption(f"Não foi possível gerar o PDF: {documento.get('erro') or 'erro desconhecido'}")
+
+    if st.session_state.get(chave_retry_aberto):
+        cpf_retry = st.text_input(
+            "CPF do paciente (para gerar o PDF novamente)",
+            key=f"pdf_retry_cpf_{codigo}",
+            placeholder="000.000.000-00",
+        )
+        col_conf, col_canc = st.columns(2)
+        with col_conf:
+            if st.button("Gerar PDF", key=f"pdf_retry_confirmar_{codigo}", use_container_width=True, type="primary"):
+                if not cpf_retry.strip():
+                    st.error("Informe o CPF para gerar o documento.")
+                else:
+                    disparar_geracao_documento(
+                        codigo,
+                        nome=atestado.get("nome_paciente") or "",
+                        cpf=cpf_retry,
+                        data_inicio_iso=atestado.get("data_inicio") or atestado.get("data_emissao"),
+                        dias=atestado.get("dias_afastamento"),
+                        cid=atestado.get("cid") or "",
+                        qr_png=gerar_qr(url_verificacao_atestado),
+                        origem=ORIGEM_CANVA_RETRY,
+                    )
+                    st.session_state.pop(chave_retry_aberto, None)
+                    st.success("Gerando o PDF — atualize a página em alguns instantes.")
+                    st.rerun()
+        with col_canc:
+            if st.button("Cancelar", key=f"pdf_retry_cancelar_{codigo}", use_container_width=True, type="secondary"):
+                st.session_state.pop(chave_retry_aberto, None)
+                st.rerun()
+    else:
+        if st.button("Tentar gerar PDF novamente", key=f"pdf_retry_abrir_{codigo}", use_container_width=True, type="secondary"):
+            st.session_state[chave_retry_aberto] = True
+            st.rerun()
+
+
 # ---------------------------------------------------------------------------
 # TELA 1 — Verificação pública (?codigo=XXX)
 # ---------------------------------------------------------------------------
@@ -1632,6 +1719,44 @@ def tela_admin() -> None:
         if st.button("Sair", use_container_width=True, type="secondary", key="sair_admin"):
             del st.session_state["usuario"]
             st.rerun()
+
+    st.write("")
+    with st.container(border=True):
+        col_status_canva, col_acao_canva = st.columns([3, 1.4])
+        with col_status_canva:
+            if not canva_configurado():
+                icone = _svg("plug", 15, COR_NEUTRA, "margin-right:0.4rem; vertical-align:middle")
+                st.markdown(
+                    f'<p style="margin:0; font-weight:700; color:{COR_TEXTO};">{icone}Canva não configurado</p>'
+                    f'<p style="margin:0.15rem 0 0 0; font-size:0.8125rem; opacity:0.7;">'
+                    f'Defina CANVA_CLIENT_ID e CANVA_CLIENT_SECRET no ambiente do servidor (ver CLAUDE.md).</p>',
+                    unsafe_allow_html=True,
+                )
+            elif canva_conectado():
+                icone = _svg("check-circle", 15, COR_PRIMARIA, "margin-right:0.4rem; vertical-align:middle")
+                st.markdown(
+                    f'<p style="margin:0; font-weight:700; color:{COR_PRIMARIA};">{icone}Canva conectado</p>'
+                    f'<p style="margin:0.15rem 0 0 0; font-size:0.8125rem; opacity:0.7;">'
+                    f'Atestados emitidos com CPF preenchido geram o PDF automaticamente. '
+                    f'Trocando de conta do Canva? Conecte de novo abaixo.</p>',
+                    unsafe_allow_html=True,
+                )
+            else:
+                icone = _svg("alert-triangle", 15, COR_AMBAR, "margin-right:0.4rem; vertical-align:middle")
+                st.markdown(
+                    f'<p style="margin:0; font-weight:700; color:{COR_AMBAR};">{icone}Canva não conectado</p>'
+                    f'<p style="margin:0.15rem 0 0 0; font-size:0.8125rem; opacity:0.7;">'
+                    f'PDFs de atestados não serão gerados até um administrador conectar.</p>',
+                    unsafe_allow_html=True,
+                )
+        with col_acao_canva:
+            if canva_configurado():
+                st.link_button(
+                    "Conectar/Reconectar",
+                    f"{_url_base()}admin/canva/conectar",
+                    use_container_width=True,
+                    type="secondary",
+                )
 
     icone_cadastrar = _svg("user-plus", 17, COR_PRIMARIA, "margin-right:0.5rem; vertical-align:middle; flex-shrink:0")
     st.markdown(
@@ -2250,6 +2375,15 @@ def tela_dashboard() -> None:
             "Nome completo do paciente *",
             placeholder="ex.: João da Silva",
         )
+        cpf_paciente = st.text_input(
+            "CPF do paciente (opcional)",
+            placeholder="ex.: 000.000.000-00",
+            help=(
+                "Nunca é salvo no registro do atestado. Se preenchido, gera automaticamente "
+                "o PDF do atestado (documento com QR Code) via Canva, disponível para baixar "
+                "aqui embaixo assim que terminar de processar."
+            ),
+        )
         cid = st.text_input(
             "CID-10 *",
             placeholder="ex.: J18.9",
@@ -2349,6 +2483,19 @@ def tela_dashboard() -> None:
             # Gerar QR Code
             url_verificacao = f"{_url_base()}?codigo={codigo}"
             qr_bytes = gerar_qr(url_verificacao)
+
+            # Documento PDF via Canva: assíncrono (thread em segundo plano) e só
+            # dispara se o CPF foi preenchido — nunca trava a emissão do atestado.
+            disparar_geracao_documento(
+                codigo,
+                nome=nome_paciente.strip(),
+                cpf=cpf_paciente,
+                data_inicio_iso=str(data_inicio_val) if data_inicio_val else str(data_emissao),
+                dias=int(dias) if dias else None,
+                cid=cid.strip().upper(),
+                qr_png=qr_bytes,
+                origem=ORIGEM_FORMULARIO,
+            )
 
             st.success("Atestado emitido com sucesso.")
 
@@ -2555,6 +2702,9 @@ def tela_dashboard() -> None:
                     col_vazia1, col_qr_meio, col_vazia2 = st.columns([1, 1, 1])
                     with col_qr_meio:
                         st.image(qr_mini, caption=f"QR — {a['nome_paciente'] or codigo_atestado}", use_container_width=True)
+
+                if status_atestado != "anonimizado":
+                    _secao_documento_pdf(a, codigo_atestado, url)
 
     st.write("")
     st.divider()

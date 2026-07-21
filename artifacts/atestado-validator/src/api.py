@@ -24,6 +24,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
 from src.audit import EVENTO_ATESTADO_EMITIDO, ORIGEM_API, registrar_evento
+from src.canva_client import disparar_geracao_documento
 from src.database import buscar_atestado_por_codigo, buscar_medico_por_token_hash, salvar_atestado
 from src.qr_generator import gerar_qr
 from src.api_tokens import hash_token
@@ -82,6 +83,10 @@ def registrar_atestado_core(medico: dict, corpo: dict, origem: str, request: Req
     `origem` identifica de onde veio a chamada (ver src.audit.ORIGEM_*) —
     grava na trilha de auditoria junto com o evento de emissão.
 
+    `corpo["cpf"]` é OPCIONAL e NUNCA é salvo no atestado — se vier
+    preenchido, dispara em segundo plano a geração do PDF via Canva (ver
+    src/canva_client.py), que usa o CPF só para preencher o documento.
+
     Levanta ErroValidacaoAtestado (mensagem em português) se os dados forem
     inválidos. Não grava nada no banco nesse caso.
     """
@@ -90,6 +95,10 @@ def registrar_atestado_core(medico: dict, corpo: dict, origem: str, request: Req
 
     nome_paciente = str(corpo.get("nome_paciente") or "").strip()
     cid = str(corpo.get("cid") or "").strip()
+    # CPF é OPCIONAL e nunca é salvo no registro do atestado (decisão de
+    # LGPD já documentada) — só existe, se informado, para preencher o
+    # campo correspondente do PDF gerado via Canva (ver disparo abaixo).
+    cpf = str(corpo.get("cpf") or "").strip() or None
     data_emissao_bruta = corpo.get("data_emissao")
     dias_afastamento_bruto = corpo.get("dias_afastamento")
     data_inicio_bruta = corpo.get("data_inicio")
@@ -170,6 +179,20 @@ def registrar_atestado_core(medico: dict, corpo: dict, origem: str, request: Req
         origem=origem,
     )
 
+    # Geração do PDF via Canva: assíncrona (thread em segundo plano) e só
+    # dispara se um CPF foi informado — nunca bloqueia nem falha a emissão
+    # do atestado em si (ver src/canva_client.py).
+    disparar_geracao_documento(
+        codigo,
+        nome=nome_paciente,
+        cpf=cpf,
+        data_inicio_iso=data_inicio_str or data_emissao_str or str(date.today()),
+        dias=dias_afastamento,
+        cid=cid.upper(),
+        qr_png=gerar_qr(url_verificacao(codigo, request)),
+        origem=origem,
+    )
+
     return {
         "codigo": codigo,
         "url_verificacao": url_verificacao(codigo, request),
@@ -196,6 +219,9 @@ async def registrar_atestado(request: Request) -> Response:
         cid (str, obrigatório)
         data_emissao (str "AAAA-MM-DD", obrigatório)
         dias_afastamento (int) — OU — data_inicio + data_fim (str "AAAA-MM-DD")
+        cpf (str, opcional) — nunca é salvo; se informado, dispara a geração
+            automática do PDF do atestado via Canva em segundo plano
+            (disponível depois para download no dashboard do médico)
 
     Resposta 201 JSON:
         codigo, url_verificacao, qr_code_url, nome_medico, crm

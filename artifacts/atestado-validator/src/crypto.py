@@ -87,3 +87,18 @@ def descriptografar(texto_cifrado: Optional[str]) -> Optional[str]:
     if texto_cifrado is None:
         return None
     return _fernet().decrypt(texto_cifrado.encode("utf-8")).decode("utf-8")
+
+
+def criptografar_bytes(dados: bytes) -> bytes:
+    """
+    Variante em bytes de `criptografar()` — usada para arquivos binários em
+    repouso (ex.: o PDF do atestado gerado via Canva, que carrega nome e CPF
+    em claro dentro do documento). Mesma chave ENCRYPTION_KEY, mesmo
+    fail-closed de `_fernet()`.
+    """
+    return _fernet().encrypt(dados)
+
+
+def descriptografar_bytes(dados_cifrados: bytes) -> bytes:
+    """Variante em bytes de `descriptografar()`. Levanta `InvalidToken` se a chave não bater."""
+    return _fernet().decrypt(dados_cifrados)

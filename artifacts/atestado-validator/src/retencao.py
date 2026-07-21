@@ -38,6 +38,7 @@ from src.audit import (
     ORIGEM_RETENCAO_AUTOMATICA,
     registrar_evento,
 )
+from src.canva_client import excluir_documento_gerado
 from src.database import (
     anonimizar_atestado,
     excluir_atestado_definitivamente,
@@ -57,6 +58,10 @@ def anonimizar_atestado_manual(codigo: str, *, ator_usuario: str, ator_perfil: s
     """
     anonimizado = anonimizar_atestado(codigo)
     if anonimizado:
+        # O PDF gerado via Canva (se houver) carrega nome/CPF em claro dentro
+        # do documento — anonimizar só o registro no banco não adiantaria
+        # nada se essa cópia continuasse no disco.
+        excluir_documento_gerado(codigo)
         registrar_evento(
             EVENTO_ATESTADO_ANONIMIZADO,
             ator_usuario=ator_usuario,
@@ -75,6 +80,7 @@ def excluir_atestado_manual(codigo: str, *, ator_usuario: str, ator_perfil: str,
     """
     excluido = excluir_atestado_definitivamente(codigo)
     if excluido:
+        excluir_documento_gerado(codigo)
         registrar_evento(
             EVENTO_ATESTADO_EXCLUIDO,
             ator_usuario=ator_usuario,
@@ -121,6 +127,7 @@ def aplicar_retencao_automatica() -> int:
         total_anonimizados = 0
         for codigo in codigos:
             if anonimizar_atestado(codigo):
+                excluir_documento_gerado(codigo)
                 registrar_evento(
                     EVENTO_ATESTADO_ANONIMIZADO,
                     origem=ORIGEM_RETENCAO_AUTOMATICA,
