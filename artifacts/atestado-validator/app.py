@@ -436,6 +436,96 @@ def _injetar_estilo() -> None:
         }}
 
         /* ─────────────────────────────────────────────
+           PÁGINA PÚBLICA DE VERIFICAÇÃO — tema claro/escuro
+           Variáveis escopadas em .st-key-pagina-publica — a classe que o
+           Streamlit gera para `st.container(key="pagina-publica")`, que
+           envolve TODO o conteúdo de tela_verificacao(). Usamos a classe
+           de um container real (em vez de uma <div> HTML aberta "na mão")
+           porque cada st.markdown() é interpretado como um fragmento HTML
+           isolado: uma tag deixada sem fechar não envolveria de fato os
+           elementos nativos do Streamlit renderizados depois dela. Como
+           essa classe só existe quando a página de verificação está na
+           tela, nunca afeta login, dashboard ou os painéis internos (que
+           seguem sempre o tema claro da marca, sem variação por SO).
+           ───────────────────────────────────────────── */
+        :root {{
+            --pub-app-fundo: {COR_FUNDO_CLARO};
+        }}
+        .st-key-pagina-publica {{
+            --pub-fundo: {COR_FUNDO_CLARO};
+            --pub-cartao: {COR_BRANCO};
+            --pub-borda: {COR_BORDA};
+            --pub-texto: {COR_TEXTO};
+            --pub-primaria: {COR_PRIMARIA};
+            --pub-cor-autentico: {COR_PRIMARIA};
+            --pub-cor-autentico-fundo: {COR_FUNDO_CLARO};
+            --pub-cor-revogado: {COR_SECUNDARIA};
+            --pub-cor-revogado-fundo: #FBEAEA;
+            --pub-cor-nao-encontrado: {COR_AMBAR};
+            --pub-cor-nao-encontrado-fundo: {COR_AMBAR_FUNDO};
+            --pub-cor-anonimizado: {COR_NEUTRA};
+            --pub-cor-anonimizado-fundo: {COR_NEUTRA_FUNDO};
+        }}
+        @media (prefers-color-scheme: dark) {{
+            :root {{
+                --pub-app-fundo: #101A1C;
+            }}
+            .st-key-pagina-publica {{
+                --pub-fundo: #101A1C;
+                --pub-cartao: #172427;
+                --pub-borda: #2C3D41;
+                --pub-texto: #E7E6E4;
+                --pub-primaria: #7FD4E3;
+                --pub-cor-autentico: #7FD4E3;
+                --pub-cor-autentico-fundo: #1A3338;
+                --pub-cor-revogado: #F0837E;
+                --pub-cor-revogado-fundo: #3A2020;
+                --pub-cor-nao-encontrado: #F0B15C;
+                --pub-cor-nao-encontrado-fundo: #3A2C15;
+                --pub-cor-anonimizado: #B7B7B7;
+                --pub-cor-anonimizado-fundo: #2B2B2B;
+            }}
+        }}
+        .stApp:has(.st-key-pagina-publica) {{
+            background-color: var(--pub-app-fundo) !important;
+        }}
+        .stApp:has(.st-key-pagina-publica) [data-testid="stAppViewContainer"] {{
+            background-color: var(--pub-app-fundo) !important;
+        }}
+        .st-key-pagina-publica [data-testid="stVerticalBlockBorderWrapper"] {{
+            background-color: var(--pub-cartao) !important;
+            border-color: var(--pub-borda) !important;
+        }}
+        .st-key-pagina-publica hr {{
+            border-color: var(--pub-borda) !important;
+        }}
+        .st-key-pagina-publica .st-key-pub-metadados {{
+            background-color: var(--pub-fundo) !important;
+            border: 1px solid var(--pub-borda) !important;
+            border-radius: 8px !important;
+            padding: 1rem 1.25rem 1.125rem 1.25rem !important;
+            margin-top: 1.5rem !important;
+        }}
+
+        /* Cabeçalho da página pública — sóbrio, sem "cartão flutuante":
+           logo centralizada sobre o fundo da própria página. */
+        .amorsaude-cabecalho-publico {{
+            display: flex; justify-content: center; align-items: center;
+            padding: 1.5rem 1rem 1.25rem 1rem;
+            margin-bottom: 1.5rem;
+            border-bottom: 1px solid var(--pub-borda);
+        }}
+        .amorsaude-cabecalho-publico a {{
+            display: inline-flex; line-height: 0; border-radius: 8px;
+            transition: opacity 160ms ease, transform 160ms ease;
+        }}
+        .amorsaude-cabecalho-publico a:hover {{ opacity: 0.82; transform: translateY(-1px); }}
+        .amorsaude-cabecalho-publico a:active {{ transform: translateY(0); }}
+        .amorsaude-cabecalho-publico a:focus-visible {{
+            outline: 2px solid var(--pub-primaria); outline-offset: 4px;
+        }}
+
+        /* ─────────────────────────────────────────────
            BASE — box-sizing + overflow global
            ───────────────────────────────────────────── */
         *, *::before, *::after {{
@@ -472,6 +562,13 @@ def _injetar_estilo() -> None:
             }}
             .amorsaude-logo-wrap {{
                 padding: 0.25rem 0.5rem !important;
+            }}
+            .amorsaude-cabecalho-publico {{
+                padding: 1.125rem 1rem 1rem 1rem !important;
+                margin-bottom: 1.25rem !important;
+            }}
+            .amorsaude-cabecalho-publico img {{
+                height: 32px !important;
             }}
 
             /* Selo de verificação: mais compacto */
@@ -584,13 +681,15 @@ def _logo_html(altura_px: int = 48, cor_fallback: str = COR_PRIMARIA) -> str:
 
 def _barra_cabecalho(conteudo_direita: str = "") -> None:
     """
-    Barra de cabeçalho com fundo verde-água + logo à esquerda, usada no dashboard e na verificação.
+    Barra de cabeçalho com fundo verde-água + logo à esquerda, usada nas telas internas
+    (login, dashboard, admin, auditoria, retenção). A página pública de verificação usa
+    o cabeçalho dedicado `_cabecalho_verificacao()`, mais sóbrio.
 
     Construída como uma única linha (sem quebras/indentação entre as tags).
-    Quando `conteudo_direita` vem vazio (tela de verificação), uma versão
-    indentada e multi-linha faz o Markdown do Streamlit interpretar a linha
-    em branco + `</div>` indentado como um bloco de código, exibindo o texto
-    "</div>" na tela. Uma única linha elimina essa ambiguidade.
+    Quando `conteudo_direita` vem vazio, uma versão indentada e multi-linha faz o
+    Markdown do Streamlit interpretar a linha em branco + `</div>` indentado como um
+    bloco de código, exibindo o texto "</div>" na tela. Uma única linha elimina essa
+    ambiguidade.
     """
     # A logo tem a palavra "amor" na mesma cor verde-água da marca — sobre o
     # fundo teal do cabeçalho ela ficaria "invisível" (mesma cor do fundo).
@@ -607,6 +706,26 @@ def _barra_cabecalho(conteudo_direita: str = "") -> None:
         f'</div>'
         f'<div style="color:{COR_BRANCO}; text-align:right; font-family:\'Nunito Sans\',sans-serif;">{conteudo_direita}</div>'
         f'</div>'
+    )
+    st.markdown(html_str, unsafe_allow_html=True)
+
+
+def _cabecalho_verificacao() -> None:
+    """
+    Cabeçalho sóbrio e limpo da página pública de verificação: logo centralizada,
+    sem a "placa branca"/cartão flutuante do cabeçalho interno — aqui a logo fica
+    direto sobre o fundo da própria página (funciona porque o arquivo da logo não
+    tem nenhuma cor idêntica ao fundo, ao contrário do cabeçalho teal interno).
+
+    A logo é um link clicável para o site oficial da AmorSaúde, aberto em nova aba.
+    """
+    html_str = (
+        '<div class="amorsaude-cabecalho-publico">'
+        '<a href="https://www.amorsaude.com.br" target="_blank" rel="noopener noreferrer" '
+        'aria-label="Site oficial da AmorSaúde (abre em nova aba)">'
+        f'{_logo_html(40)}'
+        '</a>'
+        '</div>'
     )
     st.markdown(html_str, unsafe_allow_html=True)
 
@@ -635,7 +754,7 @@ def _selo_status(icone_svg: str, titulo: str, cor: str, cor_fundo: str, subtitul
     de passá-los, para evitar regressões se um novo call site esquecer disso.
     """
     subtitulo_html = (
-        f'<p style="color:{COR_TEXTO}; font-size:0.9375rem; max-width:32rem; '
+        f'<p style="color:var(--pub-texto); font-size:0.9375rem; max-width:32rem; '
         f'margin:0.75rem auto 0 auto; line-height:1.6; opacity:0.85; '
         f'font-family:\'Nunito Sans\',sans-serif;">{html.escape(subtitulo)}</p>'
         if subtitulo
@@ -649,7 +768,7 @@ def _selo_status(icone_svg: str, titulo: str, cor: str, cor_fundo: str, subtitul
                         box-shadow:0 2px 12px rgba(0,0,0,0.08);">
                 {icone_svg}
             </div>
-            <h1 style="color:{cor}; margin:0; font-size:1.625rem; font-weight:800;
+            <h1 style="color:{cor} !important; margin:0; font-size:1.625rem; font-weight:800;
                        letter-spacing:-0.01em; font-family:'Nunito Sans',sans-serif;">{titulo}</h1>
             {subtitulo_html}
         </div>
@@ -659,14 +778,14 @@ def _selo_status(icone_svg: str, titulo: str, cor: str, cor_fundo: str, subtitul
 
 
 def _frase_confianca() -> None:
-    ico_shield = _svg("shield-check", 13, COR_PRIMARIA, "flex-shrink:0")
-    ico_lock   = _svg("lock",         12, COR_PRIMARIA, "flex-shrink:0")
-    ico_eye    = _svg("eye-off",      12, COR_PRIMARIA, "flex-shrink:0")
+    ico_shield = _svg("shield-check", 13, "var(--pub-primaria)", "flex-shrink:0")
+    ico_lock   = _svg("lock",         12, "var(--pub-primaria)", "flex-shrink:0")
+    ico_eye    = _svg("eye-off",      12, "var(--pub-primaria)", "flex-shrink:0")
 
     def _badge(icone: str, texto: str) -> str:
         return (
             f'<span style="display:inline-flex; align-items:center; gap:0.3rem; '
-            f'background:{COR_FUNDO_CLARO}; border:1px solid {COR_BORDA}; '
+            f'background:var(--pub-fundo); border:1px solid var(--pub-borda); '
             f'border-radius:20px; padding:0.25rem 0.625rem; white-space:nowrap;">'
             f'{icone}<span>{texto}</span></span>'
         )
@@ -675,7 +794,7 @@ def _frase_confianca() -> None:
         f"""
         <div style="display:flex; flex-wrap:wrap; justify-content:center; gap:0.5rem;
                     margin:0.5rem 0 1.5rem 0; font-family:'Nunito Sans',sans-serif;
-                    font-size:0.75rem; font-weight:600; color:{COR_PRIMARIA};
+                    font-size:0.75rem; font-weight:600; color:var(--pub-primaria);
                     letter-spacing:0.01em;">
             {_badge(ico_shield, "Registrado na AmorSaúde")}
             {_badge(ico_lock,   "Conexão segura")}
@@ -687,21 +806,44 @@ def _frase_confianca() -> None:
 
 
 def _bloco_metadados_verificacao(codigo: str, rotulo_codigo: str = "Código de autenticação") -> None:
-    """Bloco discreto de metadados da consulta, no padrão de recibo de verificação oficial."""
+    """
+    Bloco discreto de metadados da consulta, no padrão de recibo de verificação oficial:
+    data/hora da consulta + o código, num chip monoespaçado com botão de copiar.
+
+    Usa `st.container(key=...)` (em vez de abrir uma <div> "crua" por cima de
+    outros elementos do Streamlit) porque o HTML de cada `st.markdown()` é
+    interpretado como um fragmento isolado — uma tag deixada propositalmente
+    sem fechar aqui NÃO envolveria de fato os elementos nativos renderizados
+    depois (como o botão de copiar); o navegador fecharia a div sozinha no
+    fim do fragmento. `st.container(key=...)` é a forma correta e
+    documentada de estilizar um contêiner que precisa conter outros widgets.
+    """
     agora = datetime.now().strftime("%d/%m/%Y às %H:%M:%S")
-    st.markdown(
-        f"""
-        <div style="background-color:{COR_FUNDO_CLARO}; border:1px solid {COR_BORDA};
-                    border-radius:8px; padding:1rem 1.25rem; margin-top:1.5rem;
-                    font-size:0.8125rem; font-family:'Nunito Sans',sans-serif; color:{COR_TEXTO};">
-            <div style="display:flex; justify-content:space-between; flex-wrap:wrap; gap:0.5rem 1.5rem;">
-                <span><strong style="font-weight:700;">Verificado em:</strong>&nbsp;{agora}</span>
-                <span style="word-break:break-all;"><strong style="font-weight:700;">{rotulo_codigo}:</strong>&nbsp;<code style="font-size:0.75rem; background:{COR_BRANCO}; padding:0.1em 0.3em; border-radius:4px; border:1px solid {COR_BORDA};">{html.escape(codigo)}</code></span>
+    with st.container(key="pub-metadados"):
+        st.markdown(
+            f"""
+            <div style="font-size:0.8125rem; font-family:'Nunito Sans',sans-serif; color:var(--pub-texto);">
+                <strong style="font-weight:700;">Verificado em:</strong>&nbsp;{agora}
             </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+            <div style="color:var(--pub-texto); opacity:0.6; font-size:0.75rem; font-weight:600;
+                        letter-spacing:0.04em; text-transform:uppercase; margin:0.875rem 0 0.5rem 0;">
+                {html.escape(rotulo_codigo)}
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        col_codigo, col_botao = st.columns([5, 2], vertical_alignment="center")
+        with col_codigo:
+            st.markdown(
+                f'<div style="width:100%; word-break:break-all; overflow-wrap:anywhere; '
+                f'font-family:ui-monospace,SFMono-Regular,Consolas,\'Liberation Mono\',Menlo,monospace; '
+                f'font-size:0.875rem; font-weight:600; letter-spacing:0.02em; '
+                f'background-color:var(--pub-cartao); border:1px solid var(--pub-borda); border-radius:6px; '
+                f'padding:0.5rem 0.625rem; color:var(--pub-primaria);">{html.escape(codigo)}</div>',
+                unsafe_allow_html=True,
+            )
+        with col_botao:
+            _botao_copiar_codigo(codigo)
 
 
 def _campo_dado(rotulo: str, valor: str) -> None:
@@ -737,11 +879,49 @@ def _campo_cid_protegido() -> None:
     )
 
 
+def _campo_dado_publico(rotulo: str, valor: str) -> None:
+    """
+    Igual a `_campo_dado`, mas usando as variáveis CSS de tema claro/escuro da
+    página pública. Função separada (em vez de mudar `_campo_dado`) porque
+    aquela também é usada na ferramenta de retenção do admin, que fica sempre
+    no tema claro da marca — não deve variar com o SO.
+    """
+    st.markdown(
+        f"""
+        <div style="margin-bottom:1.25rem; font-family:'Nunito Sans',sans-serif;">
+            <div style="color:var(--pub-texto); opacity:0.6; font-size:0.75rem; font-weight:600;
+                        letter-spacing:0.04em; text-transform:uppercase; margin-bottom:0.25rem;">{rotulo}</div>
+            <div style="color:var(--pub-texto); font-size:1.1875rem; font-weight:700; line-height:1.3;
+                        word-break:break-word;">{html.escape(str(valor))}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def _campo_cid_protegido_publico() -> None:
+    """Igual a `_campo_cid_protegido`, mas com as variáveis CSS da página pública (ver `_campo_dado_publico`)."""
+    icone = _svg("lock", 14, "var(--pub-texto)", "opacity:0.45; margin-right:0.375rem; flex-shrink:0")
+    st.markdown(
+        f"""
+        <div style="margin-bottom:1.25rem; font-family:'Nunito Sans',sans-serif;">
+            <div style="color:var(--pub-texto); opacity:0.6; font-size:0.75rem; font-weight:600;
+                        letter-spacing:0.04em; text-transform:uppercase; margin-bottom:0.25rem;">Diagnóstico (CID)</div>
+            <div style="color:var(--pub-texto); font-size:0.9375rem; font-weight:600;
+                        display:flex; align-items:center; opacity:0.65;">
+                {icone}<span>Protegido por sigilo médico</span>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 def _bloco_como_funciona() -> None:
-    ico_info    = _svg("info",     14, COR_PRIMARIA, "flex-shrink:0")
-    ico_shield  = _svg("shield",   13, COR_PRIMARIA, "flex-shrink:0; opacity:0.7")
-    ico_eye_off = _svg("eye-off",  13, COR_PRIMARIA, "flex-shrink:0; opacity:0.7")
-    ico_zap     = _svg("zap",      13, COR_PRIMARIA, "flex-shrink:0; opacity:0.7")
+    ico_info    = _svg("info",     14, "var(--pub-primaria)", "flex-shrink:0")
+    ico_shield  = _svg("shield",   13, "var(--pub-primaria)", "flex-shrink:0; opacity:0.7")
+    ico_eye_off = _svg("eye-off",  13, "var(--pub-primaria)", "flex-shrink:0; opacity:0.7")
+    ico_zap     = _svg("zap",      13, "var(--pub-primaria)", "flex-shrink:0; opacity:0.7")
 
     def _item(icone: str, texto: str) -> str:
         return (
@@ -752,11 +932,11 @@ def _bloco_como_funciona() -> None:
 
     st.markdown(
         f"""
-        <div style="background-color:{COR_BRANCO}; border:1px solid {COR_BORDA}; border-radius:10px;
-                    padding:1rem 1.25rem; margin-top:1.5rem; color:{COR_TEXTO};
+        <div style="background-color:var(--pub-cartao); border:1px solid var(--pub-borda); border-radius:10px;
+                    padding:1rem 1.25rem; margin-top:1.5rem; color:var(--pub-texto);
                     font-family:'Nunito Sans',sans-serif;">
             <div style="display:flex; align-items:center; gap:0.5rem; font-weight:700;
-                        font-size:0.875rem; color:{COR_PRIMARIA}; margin-bottom:0.25rem;">
+                        font-size:0.875rem; color:var(--pub-primaria); margin-bottom:0.25rem;">
                 {ico_info} Como funciona esta verificação
             </div>
             {_item(ico_zap,     "Verificação em tempo real diretamente na base de dados AmorSaúde — não é um PDF e não pode ser falsificado.")}
@@ -770,11 +950,26 @@ def _bloco_como_funciona() -> None:
 
 def _botao_imprimir() -> None:
     """Botão que abre a caixa de impressão do navegador para gerar um comprovante limpo."""
-    svg_printer = _svg("printer", 15, COR_PRIMARIA, "margin-right:0.4rem; vertical-align:middle")
+    svg_printer = _svg("printer", 15, "currentColor", "margin-right:0.4rem; vertical-align:middle")
     html_conteudo = f"""
+    <style>
+        :root {{
+            --cor-primaria: {COR_PRIMARIA};
+            --cor-fundo: {COR_BRANCO};
+        }}
+        @media (prefers-color-scheme: dark) {{
+            :root {{
+                --cor-primaria: #7FD4E3;
+                --cor-fundo: #172427;
+            }}
+        }}
+        #btn-imprimir-comprovante {{
+            background-color: var(--cor-fundo); color: var(--cor-primaria);
+            border: 1.5px solid var(--cor-primaria);
+        }}
+    </style>
     <button id="btn-imprimir-comprovante" class="amorsaude-btn-outline"
-            style="background-color:{COR_BRANCO}; color:{COR_PRIMARIA}; border:1.5px solid {COR_PRIMARIA};
-                   border-radius:8px; padding:0.5rem 1rem; cursor:pointer; font-size:0.875rem;
+            style="border-radius:8px; padding:0.5rem 1rem; cursor:pointer; font-size:0.875rem;
                    font-weight:700; width:100%; font-family:'Nunito Sans',sans-serif;
                    letter-spacing:0.01em;
                    display:flex; align-items:center; justify-content:center; gap:0.375rem;">
@@ -826,6 +1021,68 @@ def _botao_copiar_link(url: str, chave: str) -> None:
             btn.addEventListener("click", function() {{
                 var url = btn.getAttribute("data-url");
                 navigator.clipboard.writeText(url);
+                btn.innerHTML = "&#10003;&nbsp;Copiado!";
+                setTimeout(function() {{
+                    btn.innerHTML = btn.getAttribute("data-default");
+                }}, 1500);
+            }});
+        }})();
+    </script>
+    """
+    components.html(html_conteudo, height=42)
+
+
+def _botao_copiar_codigo(codigo: str) -> None:
+    """
+    Botão compacto que copia o código de autenticação (não uma URL) para a
+    área de transferência via JS — usado só na página pública de verificação.
+
+    Mesma técnica de segurança do `_botao_copiar_link`: o valor nunca é
+    interpolado dentro do <script>, fica apenas num atributo HTML escapado
+    (data-valor), lido em runtime via getAttribute.
+
+    `components.html()` renderiza num <iframe> isolado, que não herda as
+    variáveis CSS da página principal — por isso o tema claro/escuro aqui é
+    resolvido com seu próprio `@media (prefers-color-scheme: dark)`, que
+    funciona normalmente porque é uma preferência do navegador/SO, não algo
+    herdado do documento pai.
+    """
+    id_seguro = "btn-copiar-codigo-" + hashlib.sha256(codigo.encode()).hexdigest()[:16]
+    valor_escapado = html.escape(codigo, quote=True)
+    svg_clipboard = _svg("clipboard", 13, "currentColor")
+    svg_default_escaped = html.escape(svg_clipboard + "&nbsp;Copiar", quote=True)
+
+    html_conteudo = f"""
+    <style>
+        :root {{
+            --cor-primaria: {COR_PRIMARIA};
+            --cor-fundo: {COR_BRANCO};
+        }}
+        @media (prefers-color-scheme: dark) {{
+            :root {{
+                --cor-primaria: #7FD4E3;
+                --cor-fundo: #172427;
+            }}
+        }}
+        button {{
+            background-color: var(--cor-fundo); color: var(--cor-primaria);
+            border: 1.5px solid var(--cor-primaria); border-radius: 6px;
+            padding: 0.5rem 0.5rem; cursor: pointer; font-size: 0.8125rem;
+            font-weight: 700; width: 100%; font-family: 'Nunito Sans', sans-serif;
+            display: flex; align-items: center; justify-content: center; gap: 0.3rem;
+            transition: transform 160ms ease;
+        }}
+        button:hover {{ transform: translateY(-1px); }}
+        button:active {{ transform: translateY(0); }}
+    </style>
+    <button id="{id_seguro}" data-valor="{valor_escapado}" data-default="{svg_default_escaped}">
+        {svg_clipboard}&nbsp;Copiar
+    </button>
+    <script>
+        (function() {{
+            var btn = document.getElementById("{id_seguro}");
+            btn.addEventListener("click", function() {{
+                navigator.clipboard.writeText(btn.getAttribute("data-valor"));
                 btn.innerHTML = "&#10003;&nbsp;Copiado!";
                 setTimeout(function() {{
                     btn.innerHTML = btn.getAttribute("data-default");
@@ -1111,100 +1368,101 @@ def _gerar_csv(atestados: list[dict]) -> bytes:
 # ---------------------------------------------------------------------------
 
 def tela_verificacao(codigo: str) -> None:
-    _barra_cabecalho()
+    with st.container(key="pagina-publica"):
+        _cabecalho_verificacao()
 
-    with st.spinner("Consultando banco de dados…"):
-        atestado = buscar_atestado_por_codigo(codigo)
+        with st.spinner("Consultando banco de dados…"):
+            atestado = buscar_atestado_por_codigo(codigo)
 
-    col_esq, col_centro, col_dir = st.columns([1, 6, 1])
-    with col_centro:
-        with st.container(border=True):
-            if atestado is None:
-                _selo_status(
-                    icone_svg=_svg("alert-triangle", 36, COR_AMBAR),
-                    titulo="Atestado não encontrado",
-                    cor=COR_AMBAR,
-                    cor_fundo=COR_AMBAR_FUNDO,
-                    subtitulo=(
-                        "O código informado não corresponde a nenhum atestado em nossa base. "
-                        "Confira se o QR Code foi lido corretamente ou se o link está completo."
-                    ),
-                )
-                st.divider()
-                _bloco_metadados_verificacao(codigo, rotulo_codigo="Código consultado")
-            else:
-                status = atestado.get("status") or "ativo"
-                revogado_em = atestado.get("revogado_em")
-
-                if status == "anonimizado":
-                    # Atestado existiu e foi registrado, mas os dados pessoais
-                    # (paciente, CID) foram removidos — a pedido do titular
-                    # (LGPD) ou por política de retenção. Não há dado sensível
-                    # para exibir aqui; só o fato de que o registro existiu.
+        col_esq, col_centro, col_dir = st.columns([1, 6, 1])
+        with col_centro:
+            with st.container(border=True):
+                if atestado is None:
                     _selo_status(
-                        icone_svg=_svg("info", 36, COR_NEUTRA),
-                        titulo="Registro existente — dados pessoais removidos",
-                        cor=COR_NEUTRA,
-                        cor_fundo=COR_NEUTRA_FUNDO,
+                        icone_svg=_svg("alert-triangle", 36, "var(--pub-cor-nao-encontrado)"),
+                        titulo="Atestado não encontrado",
+                        cor="var(--pub-cor-nao-encontrado)",
+                        cor_fundo="var(--pub-cor-nao-encontrado-fundo)",
                         subtitulo=(
-                            "Este atestado foi emitido e registrado nesta plataforma, mas os "
-                            "dados pessoais (paciente e diagnóstico) foram removidos, a pedido "
-                            "do titular ou por política de retenção de dados."
+                            "O código informado não corresponde a nenhum atestado em nossa base. "
+                            "Confira se o QR Code foi lido corretamente ou se o link está completo."
                         ),
                     )
                     st.divider()
-                    _bloco_metadados_verificacao(codigo)
-                elif status == "revogado":
-                    # _selo_status escapa `subtitulo` internamente — não escapar aqui
-                    # de novo, senão o texto apareceria com entidades HTML duplicadas.
-                    _selo_status(
-                        icone_svg=_svg("x-circle", 36, COR_SECUNDARIA),
-                        titulo="Atestado Revogado — não é mais válido",
-                        cor=COR_SECUNDARIA,
-                        cor_fundo="#FBEAEA",
-                        subtitulo=(
-                            f"Revogado pelo médico emissor em {revogado_em}."
-                            if revogado_em
-                            else "Este atestado foi revogado pelo médico emissor."
-                        ),
-                    )
+                    _bloco_metadados_verificacao(codigo, rotulo_codigo="Código consultado")
                 else:
-                    _selo_status(
-                        icone_svg=_svg("check-circle", 36, COR_PRIMARIA),
-                        titulo="Atestado Autêntico",
-                        cor=COR_PRIMARIA,
-                        cor_fundo=COR_FUNDO_CLARO,
-                    )
+                    status = atestado.get("status") or "ativo"
+                    revogado_em = atestado.get("revogado_em")
 
-                if status != "anonimizado":
-                    _frase_confianca()
+                    if status == "anonimizado":
+                        # Atestado existiu e foi registrado, mas os dados pessoais
+                        # (paciente, CID) foram removidos — a pedido do titular
+                        # (LGPD) ou por política de retenção. Não há dado sensível
+                        # para exibir aqui; só o fato de que o registro existiu.
+                        _selo_status(
+                            icone_svg=_svg("info", 36, "var(--pub-cor-anonimizado)"),
+                            titulo="Registro existente — dados pessoais removidos",
+                            cor="var(--pub-cor-anonimizado)",
+                            cor_fundo="var(--pub-cor-anonimizado-fundo)",
+                            subtitulo=(
+                                "Este atestado foi emitido e registrado nesta plataforma, mas os "
+                                "dados pessoais (paciente e diagnóstico) foram removidos, a pedido "
+                                "do titular ou por política de retenção de dados."
+                            ),
+                        )
+                        st.divider()
+                        _bloco_metadados_verificacao(codigo)
+                    elif status == "revogado":
+                        # _selo_status escapa `subtitulo` internamente — não escapar aqui
+                        # de novo, senão o texto apareceria com entidades HTML duplicadas.
+                        _selo_status(
+                            icone_svg=_svg("x-circle", 36, "var(--pub-cor-revogado)"),
+                            titulo="Atestado Revogado — não é mais válido",
+                            cor="var(--pub-cor-revogado)",
+                            cor_fundo="var(--pub-cor-revogado-fundo)",
+                            subtitulo=(
+                                f"Revogado pelo médico emissor em {revogado_em}."
+                                if revogado_em
+                                else "Este atestado foi revogado pelo médico emissor."
+                            ),
+                        )
+                    else:
+                        _selo_status(
+                            icone_svg=_svg("check-circle", 36, "var(--pub-cor-autentico)"),
+                            titulo="Atestado Autêntico",
+                            cor="var(--pub-cor-autentico)",
+                            cor_fundo="var(--pub-cor-autentico-fundo)",
+                        )
 
-                    st.markdown(
-                        f'<p style="color:{COR_TEXTO}; font-weight:700; font-size:0.875rem; '
-                        f'letter-spacing:0.04em; text-transform:uppercase; opacity:0.6; '
-                        f'font-family:\'Nunito Sans\',sans-serif; margin:0 0 0.75rem 0;">'
-                        f'Dados validados</p>',
-                        unsafe_allow_html=True,
-                    )
-                    with st.container(border=True):
-                        col1, col2 = st.columns(2)
-                        with col1:
-                            _campo_dado("Médico", atestado["nome_medico"])
-                            _campo_dado("CRM", atestado["crm"])
-                            _campo_dado("Data de emissão", atestado["data_emissao"])
-                        with col2:
-                            _campo_dado("Paciente", atestado["nome_paciente"])
-                            _campo_cid_protegido()
-                            _campo_dado("Período de afastamento", _formatar_periodo(atestado))
+                    if status != "anonimizado":
+                        _frase_confianca()
 
-                    _bloco_metadados_verificacao(codigo)
+                        st.markdown(
+                            f'<p style="color:var(--pub-texto); font-weight:700; font-size:0.875rem; '
+                            f'letter-spacing:0.04em; text-transform:uppercase; opacity:0.6; '
+                            f'font-family:\'Nunito Sans\',sans-serif; margin:0 0 0.75rem 0;">'
+                            f'Dados validados</p>',
+                            unsafe_allow_html=True,
+                        )
+                        with st.container(border=True):
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                _campo_dado_publico("Médico", atestado["nome_medico"])
+                                _campo_dado_publico("CRM", atestado["crm"])
+                                _campo_dado_publico("Data de emissão", atestado["data_emissao"])
+                            with col2:
+                                _campo_dado_publico("Paciente", atestado["nome_paciente"])
+                                _campo_cid_protegido_publico()
+                                _campo_dado_publico("Período de afastamento", _formatar_periodo(atestado))
 
-                    st.markdown('<div class="amorsaude-nao-imprimir">', unsafe_allow_html=True)
-                    st.write("")
-                    _botao_imprimir()
-                    st.markdown("</div>", unsafe_allow_html=True)
+                        _bloco_metadados_verificacao(codigo)
 
-            _bloco_como_funciona()
+                        st.markdown('<div class="amorsaude-nao-imprimir">', unsafe_allow_html=True)
+                        st.write("")
+                        _botao_imprimir()
+                        st.markdown("</div>", unsafe_allow_html=True)
+
+                _bloco_como_funciona()
 
     _rodape()
 
