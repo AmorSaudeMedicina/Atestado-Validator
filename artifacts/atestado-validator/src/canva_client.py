@@ -69,6 +69,10 @@ _LOGGER = logging.getLogger("amorsaude.canva")
 
 _AUTH_BASE = "https://www.canva.com/api/oauth"
 _API_BASE = "https://api.canva.com/rest/v1"
+# A tela de autorização (navegador) fica em www.canva.com, mas a troca do
+# código/refresh por token é uma chamada servidor-a-servidor na API REST
+# (domínio diferente!) — não são simétricos, por isso uma constante própria.
+_TOKEN_URL = f"{_API_BASE}/oauth/token"
 
 _CLIENT_ID = os.environ.get("CANVA_CLIENT_ID", "").strip()
 _CLIENT_SECRET = os.environ.get("CANVA_CLIENT_SECRET", "").strip()
@@ -167,7 +171,7 @@ def _gravar_tokens(dados: dict, conectado_por: Optional[str] = None) -> None:
 def trocar_codigo_por_token(code: str, code_verifier: str, redirect_uri: str, conectado_por: str) -> None:
     """Troca o código de autorização (recebido em /admin/canva/callback) pelo primeiro par access+refresh token."""
     resposta = requests.post(
-        f"{_AUTH_BASE}/token",
+        _TOKEN_URL,
         data={
             "grant_type": "authorization_code",
             "code": code,
@@ -209,7 +213,7 @@ def _obter_access_token_valido() -> str:
     # traz um refresh token NOVO, que substitui o anterior no banco.
     refresh_token = descriptografar(registro["refresh_token_cifrado"])
     resposta = requests.post(
-        f"{_AUTH_BASE}/token",
+        _TOKEN_URL,
         data={"grant_type": "refresh_token", "refresh_token": refresh_token},
         auth=(_CLIENT_ID, _CLIENT_SECRET),
         timeout=15,
