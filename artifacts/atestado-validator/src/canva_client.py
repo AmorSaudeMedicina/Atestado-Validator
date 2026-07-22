@@ -266,7 +266,9 @@ def _upload_asset_qr(token: str, dados_png: bytes, nome_arquivo: str) -> str:
         timeout=30,
     )
     if resposta.status_code not in (200, 202):
-        raise ErroCanva(f"Falha ao enviar o QR Code para o Canva (status {resposta.status_code}).")
+        raise ErroCanva(
+            f"Falha ao enviar o QR Code para o Canva (status {resposta.status_code}): {resposta.text[:500]}"
+        )
     job_id = resposta.json()["job"]["id"]
     job = _aguardar_job(f"{_API_BASE}/asset-uploads/{job_id}", token, tentativas_max=30)
     return job["asset"]["id"]
@@ -323,8 +325,8 @@ def _autofill_template(token: str, *, nome: str, cpf: str, data_inicio_br: str, 
     )
     if resposta.status_code not in (200, 202):
         raise ErroCanva(
-            f"Falha ao preencher o template no Canva (status {resposta.status_code}). "
-            "Confira se os campos de autofill do template batem com CANVA_CAMPO_*."
+            f"Falha ao preencher o template no Canva (status {resposta.status_code}): {resposta.text[:500]}. "
+            f"Campos enviados: {sorted(corpo['data'].keys())}."
         )
     job_id = resposta.json()["job"]["id"]
     job = _aguardar_job(f"{_API_BASE}/autofills/{job_id}", token, tentativas_max=40)
@@ -340,7 +342,9 @@ def _exportar_pdf(token: str, design_id: str) -> bytes:
         timeout=30,
     )
     if resposta.status_code not in (200, 202):
-        raise ErroCanva(f"Falha ao exportar o PDF no Canva (status {resposta.status_code}).")
+        raise ErroCanva(
+            f"Falha ao exportar o PDF no Canva (status {resposta.status_code}): {resposta.text[:500]}"
+        )
     job_id = resposta.json()["job"]["id"]
     job = _aguardar_job(f"{_API_BASE}/exports/{job_id}", token, tentativas_max=60)
     urls = job.get("urls") or []

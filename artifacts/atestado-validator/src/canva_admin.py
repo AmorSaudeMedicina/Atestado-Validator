@@ -28,12 +28,14 @@ from starlette.responses import HTMLResponse, JSONResponse, RedirectResponse, Re
 from src.audit import EVENTO_CANVA_CONECTADO, ORIGEM_PAINEL_ADMIN, registrar_evento
 from src.auth import autenticar
 from src.canva_client import (
+    CanvaNaoConectado,
     CanvaNaoConfigurado,
     ErroCanva,
     configurado,
     gerar_par_pkce,
     trocar_codigo_por_token,
     url_autorizacao,
+    verificar_campos_template,
 )
 from src.database import consumir_canva_oauth_state, criar_canva_oauth_state
 from src.urls import url_base
@@ -201,5 +203,35 @@ async def debug_version(request: Request) -> Response:
         {
             "marcador": "TESTE-V2-CANVA",
             "commit_railway_git_sha": os.environ.get("RAILWAY_GIT_COMMIT_SHA", "desconhecido"),
+        }
+    )
+
+
+async def debug_dataset(request: Request) -> Response:
+    """
+    GET /admin/canva/debug-dataset — rota de DIAGNÓSTICO TEMPORÁRIA: consulta
+    a API "Get design dataset" do Canva para o template configurado e devolve
+    os campos de autofill REAIS que ele tem (nome + tipo), lado a lado com os
+    nomes que este servidor está configurado para usar (`CANVA_CAMPO_*`), pra
+    comparar visualmente onde está a divergência. Sem autenticação — não
+    expõe nada sensível (só nomes/tipos de campo). Remover depois que o
+    problema estiver resolvido.
+    """
+    from src.canva_client import _CAMPOS  # import tardio: só usado neste diagnóstico
+
+    try:
+        campos_reais = verificar_campos_template()
+    except (CanvaNaoConfigurado, CanvaNaoConectado, ErroCanva) as exc:
+        return JSONResponse({"erro": str(exc)}, status_code=200)
+
+    return JSONResponse(
+        {
+            "campos_reais_no_template": campos_reais,
+            "campos_que_o_servidor_espera": _CAMPOS,
+            "divergencias": [
+                f"'{chave}' -> servidor espera '{nome}', mas esse nome não existe no template"
+                for chave, nome in _CAMPOS.items()
+                if nome not in campos_reais
+            ],
         }
     )
