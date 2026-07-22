@@ -4,6 +4,10 @@ dockerfilePath = "Dockerfile"
 
 [deploy]
 healthcheckPath = "/healthz"
-healthcheckTimeout = 30
+# 30s não bastava mais para o cold start do contêiner novo terminar de
+# inicializar o Runtime do Streamlit antes do healthcheck responder — os
+# deploys "buildavam" com sucesso mas nunca eram promovidos (o tráfego
+# continuava preso no contêiner antigo). Ver CLAUDE.md/histórico do commit.
+healthcheckTimeout = 120
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 3
