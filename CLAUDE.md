@@ -125,6 +125,33 @@ veredito de "fraude confirmada".
   assim que terminar. Implementação: `src/canva_client.py` (pipeline Canva Connect
   API), `src/canva_admin.py` (autorização OAuth do servidor, uma vez, pelo admin),
   tabelas novas `documentos_atestado`/`canva_oauth_token`/`canva_oauth_state`.
+- **Feedback ao vivo da geração do PDF (dashboard):** assim que o atestado é
+  emitido (com CPF), o dashboard já mostra o indicador "Gerando o PDF..." para
+  aquele atestado, sem precisar recarregar a página; a cada poucos segundos a
+  tela confere sozinha se o PDF ficou pronto e troca o indicador pelo botão
+  "Baixar PDF do atestado" (ou por uma mensagem de erro + botão "Tentar
+  gerar PDF novamente", se a geração falhar) — tudo sem reload manual.
+  Implementação: `st.fragment(run_every=...)` do Streamlit, isolado à seção do
+  PDF de cada atestado (não recarrega o dashboard inteiro). Não usa nenhuma
+  variável de ambiente nova.
+- **"Lembrar de mim neste dispositivo" (sessão de 30 dias):** checkbox na tela
+  de login; quando marcado, mantém o médico logado por 30 dias mesmo sem
+  atividade, via cookie **httpOnly** (não acessível por JavaScript), em vez de
+  só depender da sessão do Streamlit. Como o Streamlit não tem API para setar
+  cookie httpOnly a partir do script, o login gera um token de troca de uso
+  único e válido por 60s, redireciona para uma rota HTTP dedicada
+  (`GET /auth/lembrar-me`, em `src/auth_routes.py`, registrada em `server.py` —
+  mesmo padrão já usado por `/oauth/authorize` e `/admin/canva/conectar`), que
+  troca esse token pelo cookie de verdade (30 dias, `Secure` quando em HTTPS,
+  `SameSite=Lax`) e redireciona de volta já autenticado. O valor do cookie
+  nunca é guardado em texto puro no banco — só o hash (mesmo padrão de
+  `src/api_tokens.py`). O token é **revogado** (não funciona mais) ao clicar
+  em "Sair" ou ao trocar a senha (própria ou redefinida pelo admin). Sem o
+  checkbox marcado, nada muda: a sessão continua expirando por inatividade
+  como antes. Implementação: `src/lembrar_me.py` (regra de negócio),
+  `src/auth_routes.py` (rota HTTP), tabelas novas
+  `lembrar_me_handoff`/`lembrar_me_tokens` em `src/database.py`. Não usa
+  nenhuma variável de ambiente nova.
 
 ## 4. Design / identidade visual (AmorSaúde)
 - **Paleta:** verde-água/teal `#5FC2D4` (principal), coral `#D74846` (secundária),

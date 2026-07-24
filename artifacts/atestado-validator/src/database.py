@@ -231,6 +231,43 @@ CREATE TABLE IF NOT EXISTS canva_oauth_state (
 )
 """
 
+# ---------------------------------------------------------------------------
+# "Lembrar de mim" (sessão de longa duração) — ver src/lembrar_me.py.
+#
+# Um cookie httpOnly de verdade só pode ser definido por uma resposta HTTP
+# real (cabeçalho Set-Cookie) — o script do Streamlit roda por WebSocket
+# depois da carga inicial e não tem como emitir esse cabeçalho diretamente.
+# Por isso o fluxo tem duas tabelas:
+#
+# `lembrar_me_handoff`: token de uso único e validade curtíssima (60s),
+# gerado dentro do formulário de login (Streamlit) só para atravessar até a
+# rota HTTP dedicada (/auth/lembrar-me, ver server.py), que é quem de fato
+# define o cookie httpOnly de longa duração.
+#
+# `lembrar_me_tokens`: o token de verdade (30 dias), cujo hash é conferido a
+# cada carregamento da página (via st.context.cookies) para logar
+# automaticamente. Nunca guardamos o valor bruto — mesmo padrão de hash já
+# usado para token de API (api_tokens.py) e access token OAuth do MCP.
+# ---------------------------------------------------------------------------
+
+_CREATE_LEMBRAR_ME_HANDOFF = """
+CREATE TABLE IF NOT EXISTS lembrar_me_handoff (
+    token_hash TEXT PRIMARY KEY,
+    usuario_id INTEGER NOT NULL,
+    expira_em  TEXT NOT NULL,
+    criado_em  TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+)
+"""
+
+_CREATE_LEMBRAR_ME_TOKENS = """
+CREATE TABLE IF NOT EXISTS lembrar_me_tokens (
+    token_hash TEXT PRIMARY KEY,
+    usuario_id INTEGER NOT NULL,
+    expira_em  TEXT NOT NULL,
+    criado_em  TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+)
+"""
+
 
 def _conectar() -> sqlite3.Connection:
     """
@@ -284,6 +321,8 @@ def init_db() -> None:
         conn.execute(_CREATE_DOCUMENTOS_ATESTADO)
         conn.execute(_CREATE_CANVA_OAUTH_TOKEN)
         conn.execute(_CREATE_CANVA_OAUTH_STATE)
+        conn.execute(_CREATE_LEMBRAR_ME_HANDOFF)
+        conn.execute(_CREATE_LEMBRAR_ME_TOKENS)
         conn.commit()
 
     migrar_atestados_para_cifrado()
@@ -971,3 +1010,78 @@ def consumir_canva_oauth_state(state: str) -> Optional[dict]:
         conn.execute("DELETE FROM canva_oauth_state WHERE state = ?", (state,))
         conn.commit()
         return dict(row)
+
+
+# ---------------------------------------------------------------------------
+# "Lembrar de mim" — ver src/lembrar_me.py e o comentário junto às tabelas acima.
+# ---------------------------------------------------------------------------
+
+def criar_lembrar_me_handoff(token_hash: str, usuario_id: int) -> None:
+    """Grava o token de handoff (uso único, válido por 60 segundos) gerado dentro do formulário de login."""
+    sql = """
+        INSERT INTO lembrar_me_handoff (token_hash, usuario_id, expira_em)
+        VALUES (?, ?, datetime('now','localtime','+60 seconds'))
+    """
+    with _conectar() as conn:
+        conn.execute(sql, (token_hash, usuario_id))
+        conn.commit()
+
+
+def consumir_lembrar_me_handoff(token_hash: str) -> Optional[int]:
+    """Busca e remove (uso único) um token de handoff ainda válido. Retorna o usuario_id, ou None se inexistente/expirado/já usado."""
+    with _conectar() as conn:
+        row = conn.execute(
+            "SELECT usuario_id FROM lembrar_me_handoff WHERE token_hash = ? AND expira_em > datetime('now','localtime')",
+            (token_hash,),
+        ).fetchone()
+        if not row:
+            return None
+        conn.execute("DELETE FROM lembrar_me_handoff WHERE token_hash = ?", (token_hash,))
+        conn.commit()
+        return int(row["usuario_id"])
+
+
+def criar_lembrar_me_token(token_hash: str, usuario_id: int, dias_validade: int = 30) -> None:
+    """Grava o hash do token de 'lembrar de mim' de longa duração (o valor bruto vira o cookie httpOnly)."""
+    sql = f"""
+        INSERT INTO lembrar_me_tokens (token_hash, usuario_id, expira_em)
+        VALUES (?, ?, datetime('now','localtime','+{int(dias_validade)} days'))
+    """
+    with _conectar() as conn:
+        conn.execute(sql, (token_hash, usuario_id))
+        conn.commit()
+
+
+def buscar_usuario_por_lembrar_me_token_hash(token_hash: str) -> Optional[dict]:
+    """
+    Resolve um token de 'lembrar de mim' (já em hash) para a conta dona dele —
+    só retorna se o token existir, não tiver expirado, e a conta estiver ativa
+    (mesmas garantias já usadas para token de API/OAuth do MCP).
+    """
+    sql = """
+        SELECT u.* FROM lembrar_me_tokens t
+        JOIN usuarios u ON u.id = t.usuario_id
+        WHERE t.token_hash = ? AND t.expira_em > datetime('now','localtime') AND u.ativo = 1
+    """
+    with _conectar() as conn:
+        row = conn.execute(sql, (token_hash,)).fetchone()
+    return dict(row) if row else None
+
+
+def revogar_lembrar_me_token(token_hash: str) -> None:
+    """Remove um único token de 'lembrar de mim' (usado ao clicar 'Sair' — só desconecta este navegador)."""
+    with _conectar() as conn:
+        conn.execute("DELETE FROM lembrar_me_tokens WHERE token_hash = ?", (token_hash,))
+        conn.commit()
+
+
+def revogar_lembrar_me_tokens_usuario(usuario_id: int) -> int:
+    """
+    Remove TODOS os tokens de 'lembrar de mim' de um usuário (usado ao trocar
+    senha — um cookie roubado não deve sobreviver a uma troca de senha).
+    Retorna quantos foram removidos.
+    """
+    with _conectar() as conn:
+        cursor = conn.execute("DELETE FROM lembrar_me_tokens WHERE usuario_id = ?", (usuario_id,))
+        conn.commit()
+        return cursor.rowcount

@@ -26,6 +26,7 @@ from streamlit.web.server.starlette import App
 
 from src.audit import limpar_eventos_antigos
 from src.auth import semear_usuarios_iniciais
+from src.auth_routes import lembrar_me_handoff
 from src.canva_admin import callback_canva, conectar_canva, debug_dataset, debug_version
 from src.database import init_db
 from src.api import obter_qr_code, registrar_atestado
@@ -145,6 +146,7 @@ app = App(
         Route("/admin/canva/callback", callback_canva, methods=["GET"]),
         Route("/admin/canva/debug-version", debug_version, methods=["GET"]),
         Route("/admin/canva/debug-dataset", debug_dataset, methods=["GET"]),
+        Route("/auth/lembrar-me", lembrar_me_handoff, methods=["GET"]),
     ],
 )
 

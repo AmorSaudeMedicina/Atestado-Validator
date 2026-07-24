@@ -80,13 +80,29 @@ def _host_e_confiavel(host: str) -> bool:
     )
 
 
-def _base_a_partir_da_requisicao(request: "Request") -> str | None:
+def _protocolo_da_requisicao(request: "Request") -> str:
+    """
+    Resolve 'http' ou 'https' a partir de X-Forwarded-Proto (proxy do
+    Railway/Replit) — a conexão INTERNA entre o proxy e o processo costuma
+    ser HTTP simples mesmo quando o usuário final acessa via HTTPS, então
+    `request.url.scheme` sozinho não é confiável nesse cenário.
+    """
     proto_bruto = request.headers.get("x-forwarded-proto") or request.url.scheme or "https"
     # Proxies podem encadear múltiplos valores separados por vírgula
     # (`X-Forwarded-Proto: https, http`); o primeiro é o do cliente original.
     proto = proto_bruto.split(",")[0].strip().lower()
     if proto not in ("http", "https"):
         proto = "https"
+    return proto
+
+
+def esta_em_https(request: "Request") -> bool:
+    """True se a requisição do CLIENTE (não a conexão interna com o proxy) usou HTTPS."""
+    return _protocolo_da_requisicao(request) == "https"
+
+
+def _base_a_partir_da_requisicao(request: "Request") -> str | None:
+    proto = _protocolo_da_requisicao(request)
 
     host_bruto = request.headers.get("x-forwarded-host") or request.headers.get("host")
     if not host_bruto:

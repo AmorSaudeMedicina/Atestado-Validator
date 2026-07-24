@@ -63,6 +63,13 @@ from src.database import (
     salvar_atestado,
     salvar_token_api,
 )
+from src.lembrar_me import (
+    NOME_COOKIE as LEMBRAR_ME_NOME_COOKIE,
+    autenticar_por_cookie as lembrar_me_autenticar_por_cookie,
+    gerar_handoff as lembrar_me_gerar_handoff,
+    revogar_cookie_atual as lembrar_me_revogar_cookie_atual,
+    revogar_todos_do_usuario as lembrar_me_revogar_todos_do_usuario,
+)
 from src.qr_generator import gerar_qr
 from src.retencao import (
     aplicar_retencao_automatica,
@@ -1372,8 +1379,9 @@ def _secao_documento_pdf(atestado: dict, codigo: str, url_verificacao_atestado: 
     """
     Mostra o status do documento PDF (gerado via Canva) de um atestado no
     dashboard: nada (se nunca foi disparado — ex.: emitido sem CPF),
-    "gerando…", botão de baixar (se pronto) ou botão de tentar novamente
-    (se falhou). Ver src/canva_client.py.
+    "gerando…" com auto-atualização (ver `_fragmento_pdf_gerando`), botão de
+    baixar (se pronto) ou botão de tentar novamente (se falhou). Ver
+    src/canva_client.py.
 
     Ao tentar novamente, pede o CPF de novo em vez de reaproveitar algum
     valor salvo — o CPF nunca é persistido em lugar nenhum (decisão de
@@ -1383,17 +1391,42 @@ def _secao_documento_pdf(atestado: dict, codigo: str, url_verificacao_atestado: 
     if not documento:
         return
 
+    if documento.get("status") == "gerando":
+        _fragmento_pdf_gerando(codigo)
+        return
+
+    _secao_documento_pdf_concluido(atestado, codigo, url_verificacao_atestado, documento)
+
+
+@st.fragment(run_every=6)
+def _fragmento_pdf_gerando(codigo: str) -> None:
+    """
+    Fragmento com auto-atualização (a cada 6s, só enquanto renderizado) que
+    reconsulta o status do documento sem depender do médico recarregar a
+    página. Assim que o status deixa de ser "gerando" (ficou pronto ou
+    falhou), dispara um rerun completo — `st.rerun()` sem `scope` reinicia o
+    app inteiro por padrão mesmo chamado de dentro de um fragmento — para
+    que o restante do dashboard (botão de baixar/tentar de novo) apareça
+    coerente com o resto da tela.
+    """
+    documento = buscar_documento(codigo)
+    if documento and documento.get("status") != "gerando":
+        st.rerun()
+        return
+    icone_gerando = _svg("file-text", 13, COR_PRIMARIA, "margin-right:0.3rem; vertical-align:middle")
+    st.markdown(
+        f'<p style="color:{COR_PRIMARIA}; font-size:0.82rem; font-weight:600; margin-top:0.5rem;">'
+        f'{icone_gerando} Gerando o PDF do atestado (Canva)…</p>',
+        unsafe_allow_html=True,
+    )
+
+
+def _secao_documento_pdf_concluido(
+    atestado: dict, codigo: str, url_verificacao_atestado: str, documento: dict
+) -> None:
+    """Estado final (pronto/falhou) do documento — sem polling, já que não muda mais sozinho."""
     status_documento = documento.get("status")
     chave_retry_aberto = f"pdf_retry_aberto_{codigo}"
-
-    if status_documento == "gerando":
-        icone_gerando = _svg("file-text", 13, COR_PRIMARIA, "margin-right:0.3rem; vertical-align:middle")
-        st.markdown(
-            f'<p style="color:{COR_PRIMARIA}; font-size:0.82rem; font-weight:600; margin-top:0.5rem;">'
-            f'{icone_gerando} Gerando o PDF do atestado (Canva)… atualize a página em alguns instantes.</p>',
-            unsafe_allow_html=True,
-        )
-        return
 
     if status_documento == "pronto":
         pdf_bytes = ler_documento(codigo)
@@ -1558,6 +1591,36 @@ def tela_verificacao(codigo: str) -> None:
 # TELA 2 — Login
 # ---------------------------------------------------------------------------
 
+def _sair() -> None:
+    """
+    Encerra a sessão atual: revoga no banco o token de "lembrar de mim"
+    deste navegador (se houver — o cookie em si continua no navegador, mas
+    fica inútil, já que seu hash deixa de existir no banco) e limpa a sessão.
+    """
+    lembrar_me_revogar_cookie_atual(st.context.cookies.get(LEMBRAR_ME_NOME_COOKIE))
+    st.session_state.pop("usuario", None)
+    st.session_state.pop("_lembrado", None)
+
+
+def _redirecionar_para(url: str) -> None:
+    """
+    Redireciona o navegador para `url` imediatamente — usado só no fluxo de
+    "lembrar de mim" (ver src/lembrar_me.py), para atravessar até a rota
+    HTTP dedicada que define o cookie httpOnly de verdade.
+
+    Usa uma tag <meta http-equiv="refresh"> via st.markdown (direto no
+    documento principal) em vez de JS dentro de um `components.html`: o
+    iframe do components.html normalmente tem sandbox sem
+    `allow-top-navigation`, o que faz `window.top.location.href` falhar
+    silenciosamente (testado e confirmado — o redirecionamento simplesmente
+    não acontecia).
+    """
+    st.markdown(
+        f'<meta http-equiv="refresh" content="0; url={html.escape(url, quote=True)}">',
+        unsafe_allow_html=True,
+    )
+
+
 def tela_login() -> None:
     col_esq, col_centro, col_dir = st.columns([1, 4, 1])
     with col_centro:
@@ -1583,6 +1646,13 @@ def tela_login() -> None:
             with st.form("form_login"):
                 usuario = st.text_input("Usuário", placeholder="Usuário")
                 senha = st.text_input("Senha", type="password")
+                lembrar_de_mim = st.checkbox(
+                    "Lembrar de mim neste dispositivo",
+                    help=(
+                        "Mantém você conectado por 30 dias neste navegador, mesmo sem uso. "
+                        "Não marque em computadores compartilhados."
+                    ),
+                )
                 entrar = st.form_submit_button(
                     "Entrar", use_container_width=True, type="primary"
                 )
@@ -1601,6 +1671,18 @@ def tela_login() -> None:
                     if conta:
                         st.session_state["usuario"] = conta
                         st.session_state["_ultima_atividade"] = time.time()
+                        if lembrar_de_mim:
+                            # Um cookie httpOnly só pode ser definido por uma resposta HTTP
+                            # de verdade — o script do Streamlit não tem acesso a isso
+                            # depois da carga inicial. Por isso o navegador é redirecionado
+                            # (instantâneo) para uma rota dedicada que troca este token de
+                            # uso único pelo cookie de 30 dias e volta para "/". Ver
+                            # src/lembrar_me.py para o fluxo completo.
+                            token_handoff = lembrar_me_gerar_handoff(conta["id"])
+                            url_handoff = f"{_url_base()}auth/lembrar-me?token={token_handoff}"
+                            st.info("Entrando…")
+                            _redirecionar_para(url_handoff)
+                            st.stop()
                         st.rerun()
                     else:
                         st.error("Usuário ou senha inválidos, ou conta desativada.")
@@ -1657,6 +1739,9 @@ def tela_trocar_senha_obrigatoria() -> None:
                     st.error("As senhas informadas não coincidem.")
                 else:
                     redefinir_senha_usuario(conta["id"], gerar_hash_senha(nova_senha))
+                    # Um cookie de "lembrar de mim" roubado não deve sobreviver a uma
+                    # troca de senha — revoga todas as sessões longas deste usuário.
+                    lembrar_me_revogar_todos_do_usuario(conta["id"])
                     registrar_evento(
                         EVENTO_SENHA_TROCADA_PROPRIA,
                         ator_usuario=conta["usuario"],
@@ -1669,7 +1754,7 @@ def tela_trocar_senha_obrigatoria() -> None:
                     st.rerun()
 
             if st.button("Sair", use_container_width=True, type="secondary"):
-                st.session_state.pop("usuario", None)
+                _sair()
                 st.rerun()
 
     _rodape()
@@ -1686,7 +1771,7 @@ def tela_admin() -> None:
     # chamar esta função, uma segunda checagem aqui garante que uma sessão
     # inconsistente/adulterada nunca renderize o painel de administrador.
     if admin.get("perfil") != "admin":
-        st.session_state.pop("usuario", None)
+        _sair()
         st.error("Sessão inválida. Faça login novamente.")
         st.stop()
 
@@ -1717,7 +1802,7 @@ def tela_admin() -> None:
             st.rerun()
     with col_sair:
         if st.button("Sair", use_container_width=True, type="secondary", key="sair_admin"):
-            del st.session_state["usuario"]
+            _sair()
             st.rerun()
 
     st.write("")
@@ -1901,6 +1986,9 @@ def tela_admin() -> None:
                             st.error(erro_nova_senha)
                         else:
                             redefinir_senha_usuario(m["id"], gerar_hash_senha(nova_senha))
+                            # Idem à troca de senha própria: um cookie de "lembrar de
+                            # mim" roubado não deve sobreviver a uma redefinição de senha.
+                            lembrar_me_revogar_todos_do_usuario(m["id"])
                             registrar_evento(
                                 EVENTO_SENHA_REDEFINIDA_ADMIN,
                                 ator_usuario=admin["usuario"],
@@ -1942,7 +2030,7 @@ def tela_auditoria() -> None:
     """
     admin = st.session_state["usuario"]
     if admin.get("perfil") != "admin":
-        st.session_state.pop("usuario", None)
+        _sair()
         st.error("Sessão inválida. Faça login novamente.")
         st.stop()
 
@@ -1960,7 +2048,7 @@ def tela_auditoria() -> None:
             st.rerun()
     with col_sair:
         if st.button("Sair", use_container_width=True, type="secondary", key="sair_auditoria"):
-            del st.session_state["usuario"]
+            _sair()
             st.rerun()
 
     icone_auditoria = _svg("shield-check", 17, COR_PRIMARIA, "margin-right:0.5rem; vertical-align:middle; flex-shrink:0")
@@ -2068,7 +2156,7 @@ def tela_retencao() -> None:
     """
     admin = st.session_state["usuario"]
     if admin.get("perfil") != "admin":
-        st.session_state.pop("usuario", None)
+        _sair()
         st.error("Sessão inválida. Faça login novamente.")
         st.stop()
 
@@ -2087,7 +2175,7 @@ def tela_retencao() -> None:
             st.rerun()
     with col_sair:
         if st.button("Sair", use_container_width=True, type="secondary", key="sair_retencao"):
-            del st.session_state["usuario"]
+            _sair()
             st.rerun()
 
     icone_retencao = _svg("trash-2", 17, COR_PRIMARIA, "margin-right:0.5rem; vertical-align:middle; flex-shrink:0")
@@ -2254,7 +2342,7 @@ def tela_dashboard() -> None:
     # chamar esta função, uma segunda checagem aqui garante que uma sessão
     # inconsistente/adulterada nunca renderize o dashboard do médico.
     if medico.get("perfil") != "medico":
-        st.session_state.pop("usuario", None)
+        _sair()
         st.error("Sessão inválida. Faça login novamente.")
         st.stop()
 
@@ -2263,7 +2351,7 @@ def tela_dashboard() -> None:
     # continue emitindo atestados enquanto a aba do navegador segue aberta.
     conta_atual = buscar_usuario_por_login(medico["usuario"])
     if not conta_atual or not conta_atual["ativo"]:
-        del st.session_state["usuario"]
+        _sair()
         st.error("Sua conta foi desativada. Procure o administrador do sistema.")
         st.stop()
 
@@ -2277,7 +2365,7 @@ def tela_dashboard() -> None:
     col_espaco, col_sair = st.columns([5, 1])
     with col_sair:
         if st.button("Sair", use_container_width=True, type="secondary"):
-            del st.session_state["usuario"]
+            _sair()
             st.rerun()
 
     erro_revogacao = st.session_state.pop("erro_revogacao", None)
@@ -2496,6 +2584,12 @@ def tela_dashboard() -> None:
                 qr_png=qr_bytes,
                 origem=ORIGEM_FORMULARIO,
             )
+
+            # Rebusca a lista (capturada mais acima, antes desta emissão) para
+            # que o atestado recém-criado — e o indicador "Gerando PDF..." dele
+            # — já apareçam na seção "Atestados emitidos" logo abaixo, nesta
+            # mesma execução, sem precisar recarregar a página.
+            atestados = listar_atestados_por_crm(medico["crm"])
 
             st.success("Atestado emitido com sucesso.")
 
@@ -2751,11 +2845,30 @@ _TIMEOUT_INATIVIDADE_SEGUNDOS = 30 * 60  # 30 minutos
 
 codigo_url = st.query_params.get("codigo")
 
+# "Lembrar de mim": sem sessão ativa (e fora da página pública de
+# verificação, que continua 100% anônima), tenta autenticar automaticamente
+# via o cookie httpOnly de longa duração — ver src/lembrar_me.py.
+# st.context.cookies só permite LER cookies; quem de fato definiu este
+# cookie foi a rota HTTP /auth/lembrar-me (src/auth_routes.py), não este
+# script (o Streamlit não expõe uma forma de definir cookies a partir daqui).
+if not codigo_url and "usuario" not in st.session_state:
+    _conta_lembrada = lembrar_me_autenticar_por_cookie(st.context.cookies.get(LEMBRAR_ME_NOME_COOKIE))
+    if _conta_lembrada:
+        st.session_state["usuario"] = _conta_lembrada
+        st.session_state["_ultima_atividade"] = time.time()
+        # Marca esta sessão como restaurada via "lembrar de mim" — o timeout
+        # de inatividade abaixo é ignorado nesse caso (a sessão deve durar
+        # os 30 dias do cookie mesmo sem atividade nenhuma).
+        st.session_state["_lembrado"] = True
+
 if codigo_url:
     tela_verificacao(str(codigo_url))
 elif "usuario" not in st.session_state:
     tela_login()
-elif (time.time() - st.session_state.get("_ultima_atividade", time.time())) > _TIMEOUT_INATIVIDADE_SEGUNDOS:
+elif (
+    not st.session_state.get("_lembrado")
+    and (time.time() - st.session_state.get("_ultima_atividade", time.time())) > _TIMEOUT_INATIVIDADE_SEGUNDOS
+):
     st.session_state.clear()
     st.warning("Sessão expirada por inatividade. Faça login novamente.")
     tela_login()
