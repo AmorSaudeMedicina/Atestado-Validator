@@ -33,8 +33,8 @@ from src.audit import (
     EVENTO_MEDICO_DESATIVADO,
     EVENTO_SENHA_REDEFINIDA_ADMIN,
     EVENTO_SENHA_TROCADA_PROPRIA,
-    ORIGEM_CANVA_RETRY,
     ORIGEM_FORMULARIO,
+    ORIGEM_PDF_RETRY,
     ORIGEM_PAINEL_ADMIN,
     RÓTULOS_TIPOS_DE_EVENTO,
     TODOS_OS_TIPOS_DE_EVENTO,
@@ -42,9 +42,7 @@ from src.audit import (
     registrar_evento,
 )
 from src.auth import autenticar, esta_bloqueado, gerar_hash_senha, semear_usuarios_iniciais, validar_senha_forte
-from src.canva_client import configurado as canva_configurado
-from src.canva_client import conectado as canva_conectado
-from src.canva_client import disparar_geracao_documento, ler_documento
+from src.documento_pdf import disparar_geracao_documento, ler_documento
 from src.database import (
     buscar_atestado_por_codigo,
     buscar_documento,
@@ -1377,11 +1375,10 @@ def _gerar_csv(atestados: list[dict]) -> bytes:
 
 def _secao_documento_pdf(atestado: dict, codigo: str, url_verificacao_atestado: str) -> None:
     """
-    Mostra o status do documento PDF (gerado via Canva) de um atestado no
-    dashboard: nada (se nunca foi disparado — ex.: emitido sem CPF),
-    "gerando…" com auto-atualização (ver `_fragmento_pdf_gerando`), botão de
-    baixar (se pronto) ou botão de tentar novamente (se falhou). Ver
-    src/canva_client.py.
+    Mostra o status do documento PDF de um atestado no dashboard: nada (se
+    nunca foi disparado — ex.: emitido sem CPF), "gerando…" com
+    auto-atualização (ver `_fragmento_pdf_gerando`), botão de baixar (se
+    pronto) ou botão de tentar novamente (se falhou). Ver src/documento_pdf.py.
 
     Ao tentar novamente, pede o CPF de novo em vez de reaproveitar algum
     valor salvo — o CPF nunca é persistido em lugar nenhum (decisão de
@@ -1416,7 +1413,7 @@ def _fragmento_pdf_gerando(codigo: str) -> None:
     icone_gerando = _svg("file-text", 13, COR_PRIMARIA, "margin-right:0.3rem; vertical-align:middle")
     st.markdown(
         f'<p style="color:{COR_PRIMARIA}; font-size:0.82rem; font-weight:600; margin-top:0.5rem;">'
-        f'{icone_gerando} Gerando o PDF do atestado (Canva)…</p>',
+        f'{icone_gerando} Gerando o PDF do atestado…</p>',
         unsafe_allow_html=True,
     )
 
@@ -1467,8 +1464,11 @@ def _secao_documento_pdf_concluido(
                         data_inicio_iso=atestado.get("data_inicio") or atestado.get("data_emissao"),
                         dias=atestado.get("dias_afastamento"),
                         cid=atestado.get("cid") or "",
+                        data_emissao_iso=atestado.get("data_emissao"),
+                        nome_medico=atestado.get("nome_medico") or "",
+                        crm=atestado.get("crm") or "",
                         qr_png=gerar_qr(url_verificacao_atestado),
-                        origem=ORIGEM_CANVA_RETRY,
+                        origem=ORIGEM_PDF_RETRY,
                     )
                     st.session_state.pop(chave_retry_aberto, None)
                     st.success("Gerando o PDF — atualize a página em alguns instantes.")
@@ -1806,42 +1806,6 @@ def tela_admin() -> None:
             st.rerun()
 
     st.write("")
-    with st.container(border=True):
-        col_status_canva, col_acao_canva = st.columns([3, 1.4])
-        with col_status_canva:
-            if not canva_configurado():
-                icone = _svg("plug", 15, COR_NEUTRA, "margin-right:0.4rem; vertical-align:middle")
-                st.markdown(
-                    f'<p style="margin:0; font-weight:700; color:{COR_TEXTO};">{icone}Canva não configurado</p>'
-                    f'<p style="margin:0.15rem 0 0 0; font-size:0.8125rem; opacity:0.7;">'
-                    f'Defina CANVA_CLIENT_ID e CANVA_CLIENT_SECRET no ambiente do servidor (ver CLAUDE.md).</p>',
-                    unsafe_allow_html=True,
-                )
-            elif canva_conectado():
-                icone = _svg("check-circle", 15, COR_PRIMARIA, "margin-right:0.4rem; vertical-align:middle")
-                st.markdown(
-                    f'<p style="margin:0; font-weight:700; color:{COR_PRIMARIA};">{icone}Canva conectado</p>'
-                    f'<p style="margin:0.15rem 0 0 0; font-size:0.8125rem; opacity:0.7;">'
-                    f'Atestados emitidos com CPF preenchido geram o PDF automaticamente. '
-                    f'Trocando de conta do Canva? Conecte de novo abaixo.</p>',
-                    unsafe_allow_html=True,
-                )
-            else:
-                icone = _svg("alert-triangle", 15, COR_AMBAR, "margin-right:0.4rem; vertical-align:middle")
-                st.markdown(
-                    f'<p style="margin:0; font-weight:700; color:{COR_AMBAR};">{icone}Canva não conectado</p>'
-                    f'<p style="margin:0.15rem 0 0 0; font-size:0.8125rem; opacity:0.7;">'
-                    f'PDFs de atestados não serão gerados até um administrador conectar.</p>',
-                    unsafe_allow_html=True,
-                )
-        with col_acao_canva:
-            if canva_configurado():
-                st.link_button(
-                    "Conectar/Reconectar",
-                    f"{_url_base()}admin/canva/conectar",
-                    use_container_width=True,
-                    type="secondary",
-                )
 
     icone_cadastrar = _svg("user-plus", 17, COR_PRIMARIA, "margin-right:0.5rem; vertical-align:middle; flex-shrink:0")
     st.markdown(
@@ -2572,7 +2536,7 @@ def tela_dashboard() -> None:
             url_verificacao = f"{_url_base()}?codigo={codigo}"
             qr_bytes = gerar_qr(url_verificacao)
 
-            # Documento PDF via Canva: assíncrono (thread em segundo plano) e só
+            # Documento PDF: assíncrono (thread em segundo plano) e só
             # dispara se o CPF foi preenchido — nunca trava a emissão do atestado.
             disparar_geracao_documento(
                 codigo,
@@ -2581,6 +2545,9 @@ def tela_dashboard() -> None:
                 data_inicio_iso=str(data_inicio_val) if data_inicio_val else str(data_emissao),
                 dias=int(dias) if dias else None,
                 cid=cid.strip().upper(),
+                data_emissao_iso=str(data_emissao),
+                nome_medico=medico["nome"],
+                crm=medico["crm"],
                 qr_png=qr_bytes,
                 origem=ORIGEM_FORMULARIO,
             )

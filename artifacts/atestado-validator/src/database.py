@@ -169,7 +169,7 @@ _CREATE_INDICES_AUDITORIA = (
 )
 
 # ---------------------------------------------------------------------------
-# Documento PDF do atestado (gerado via Canva) — ver src/canva_client.py.
+# Documento PDF do atestado (gerado localmente com weasyprint) — ver src/documento_pdf.py.
 #
 # Uma linha por atestado, criada quando a geração do PDF é disparada
 # (emissão pelo formulário, API ou MCP) e atualizada quando o job em segundo
@@ -871,7 +871,7 @@ def limpar_eventos_auditoria_antigos(dias_retencao: int) -> int:
 
 
 # ---------------------------------------------------------------------------
-# Documento PDF do atestado (Canva) — ver src/canva_client.py.
+# Documento PDF do atestado — ver src/documento_pdf.py.
 # ---------------------------------------------------------------------------
 
 def iniciar_geracao_documento(codigo: str) -> None:

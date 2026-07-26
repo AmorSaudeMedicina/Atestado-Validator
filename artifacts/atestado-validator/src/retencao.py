@@ -38,7 +38,7 @@ from src.audit import (
     ORIGEM_RETENCAO_AUTOMATICA,
     registrar_evento,
 )
-from src.canva_client import excluir_documento_gerado
+from src.documento_pdf import excluir_documento_gerado
 from src.database import (
     anonimizar_atestado,
     excluir_atestado_definitivamente,

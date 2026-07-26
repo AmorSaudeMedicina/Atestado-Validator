@@ -12,6 +12,16 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
+# Bibliotecas de sistema exigidas pelo weasyprint (geração do PDF do atestado
+# em src/documento_pdf.py) para renderizar texto/fontes — sem elas o import
+# de weasyprint falha. fonts-dejavu-core garante uma fonte sans-serif real
+# disponível (a imagem slim não vem com nenhuma fonte por padrão).
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        libpango-1.0-0 \
+        libpangoft2-1.0-0 \
+        fonts-dejavu-core \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY artifacts/atestado-validator/requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
