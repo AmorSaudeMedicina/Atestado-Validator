@@ -73,12 +73,20 @@ veredito de "fraude confirmada".
 ## 3. Funcionalidades já implementadas
 - **Login seguro:** perfis **admin** e **médico**, senhas com **hash (bcrypt)**,
   sessões, telas protegidas, "fail-closed".
-- **Painel do admin:** criar/listar médicos, **ativar/desativar**, **redefinir senha**.
-  Admin inicial criado a partir de `ADMIN_INITIAL_PASSWORD` (ou senha aleatória forte
-  gerada no primeiro boot, ver seção de variáveis de ambiente). O cadastro de médico
+- **Painel do admin:** criar/listar médicos, **ativar/desativar**, **redefinir senha**,
+  e gerar/revogar o **token de API** de cada médico (o dashboard do próprio médico
+  não tem mais essa gestão — ver "Dashboard do médico" abaixo). Admin inicial
+  criado a partir de `ADMIN_INITIAL_PASSWORD` (ou senha aleatória forte gerada
+  no primeiro boot, ver seção de variáveis de ambiente). O cadastro de médico
   tem também um bloco **opcional** de endereço da clínica (rua/número, cidade, UF,
   CEP, telefone) — usado só para preencher o rodapé do PDF do atestado (seção 5.1);
   sem preencher, o rodapé simplesmente omite as linhas correspondentes.
+- **Dashboard do médico:** cartões de visão geral, gráfico de atestados emitidos
+  por mês (sempre os **últimos 6 meses**, mesmo com meses zerados — evita o
+  visual de "barra isolada" com poucos dados), formulário de emissão e lista de
+  atestados emitidos. **Não tem** gestão de token de API/integrações (isso ficou
+  só no painel do admin, ver acima) — um médico que precise do token pede ao
+  administrador.
 - **Segurança/LGPD — Parte 1 (acesso/login), concluída:** nenhuma credencial aparece
   na tela, exigência de senha forte, bloqueio de conta por tentativas de login
   incorretas, expiração de sessão, e troca de senha obrigatória no primeiro login do admin.
@@ -108,12 +116,19 @@ veredito de "fraude confirmada".
 - **Geração de QR:** código aleatório único; URL de verificação; imagem PNG pública em
   `/atestados/{codigo}/qrcode.png` (com CORS, sem login, cacheável).
 - **Página pública de verificação** (`/?codigo=...`): mostra estado **Autêntico /
-  Revogado / Não encontrado**, com dados (médico, CRM, paciente, data, período).
-  **O CID (diagnóstico) NÃO aparece na página pública** — é protegido por sigilo médico.
-  Inclui metadados de verificação e sinais de confiança.
+  Revogado / Não encontrado**, com "Dados validados" nesta ordem: paciente, CPF
+  censurado (só se houver — hoje nunca há, CPF nunca é persistido, ver seção 6),
+  data de emissão + dias numa linha (ex.: "26/07/2026 · 1 dia(s)"), CID
+  (diagnóstico) e médico/CRM. **O CID fica oculto por padrão** atrás de um
+  toggle ("Mostrar diagnóstico"/"Ocultar") — quem consulta decide revelar ou
+  não nesta própria visualização; o estado do toggle não é persistido em
+  lugar nenhum (recomeça oculto a cada nova consulta). Cabeçalho compacto
+  (logo pequena, pouco espaço vertical). Inclui metadados de verificação e
+  sinais de confiança.
 - **Revogação:** o médico revoga; a verificação passa a mostrar "revogado/inválido".
-- **API REST:** registra atestado programaticamente, autenticada por **token por médico**;
-  retorna código + URL de verificação + link da imagem do QR.
+- **API REST:** registra atestado programaticamente, autenticada por **token por
+  médico** (gerado/revogado pelo admin no painel — ver seção 3); retorna código
+  + URL de verificação + link da imagem do QR.
 - **Conector MCP (para a Claude):** autenticação **OAuth 2.0** (Dynamic Client
   Registration + Authorization Code + PKCE). URL do conector:
   `https://atestado-validator-production.up.railway.app/mcp`. Expõe a ferramenta
@@ -251,7 +266,10 @@ Numa conversa da Claude com os conectores **"AmorSaude Validação" (MCP)** + **
 
 ## 6. Decisões e restrições importantes
 - Ferramenta de **apoio**, nunca "fraude confirmada".
-- **LGPD:** CID protegido na página pública; CPF não vai para a verificação nem para
+- **LGPD:** CID (diagnóstico) fica **oculto por padrão** na página pública, atrás de
+  um toggle que quem consulta aciona por conta própria ("Mostrar diagnóstico" —
+  ver seção 3); deixou de ser "nunca exibido" para "revelável sob demanda", decisão
+  explícita do dono do produto. CPF não vai para a verificação nem para
   o registro do atestado em NENHUM fluxo (formulário, API, MCP) — só existe,
   quando informado, para preencher o PDF gerado localmente (seção 5), nunca é
   persistido em lugar nenhum (nem para permitir "tentar novamente" — o dashboard

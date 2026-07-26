@@ -22,6 +22,8 @@ import time
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
+import altair as alt
+import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
 
@@ -128,6 +130,7 @@ _ICO: dict[str, str] = {
     "refresh-cw":     '<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/>',
     "plus-circle":    '<circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/>',
     "lock":           '<rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
+    "unlock":         '<rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/>',
     "search":         '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
     "bot":            '<path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/>',
     "globe":          '<circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/>',
@@ -522,8 +525,8 @@ def _injetar_estilo() -> None:
            logo centralizada sobre o fundo da própria página. */
         .amorsaude-cabecalho-publico {{
             display: flex; justify-content: center; align-items: center;
-            padding: 1.5rem 1rem 1.25rem 1rem;
-            margin-bottom: 1.5rem;
+            padding: 0.875rem 1rem 0.75rem 1rem;
+            margin-bottom: 1rem;
             border-bottom: 1px solid var(--pub-borda);
         }}
         .amorsaude-cabecalho-publico a {{
@@ -575,11 +578,11 @@ def _injetar_estilo() -> None:
                 padding: 0.25rem 0.5rem !important;
             }}
             .amorsaude-cabecalho-publico {{
-                padding: 1.125rem 1rem 1rem 1rem !important;
-                margin-bottom: 1.25rem !important;
+                padding: 0.75rem 1rem 0.625rem 1rem !important;
+                margin-bottom: 0.875rem !important;
             }}
             .amorsaude-cabecalho-publico img {{
-                height: 32px !important;
+                height: 28px !important;
             }}
 
             /* Selo de verificação: mais compacto */
@@ -734,7 +737,7 @@ def _cabecalho_verificacao() -> None:
         '<div class="amorsaude-cabecalho-publico">'
         '<a href="https://www.amorsaude.com.br" target="_blank" rel="noopener noreferrer" '
         'aria-label="Site oficial da AmorSaúde (abre em nova aba)">'
-        f'{_logo_html(40)}'
+        f'{_logo_html(30)}'
         '</a>'
         '</div>'
     )
@@ -890,6 +893,21 @@ def _campo_cid_protegido() -> None:
     )
 
 
+def _mascarar_cpf(cpf: str) -> str:
+    """
+    Mascara um CPF no formato 123.***.***-22 (mostra só os 3 primeiros e os
+    2 últimos dígitos). Hoje o CPF nunca é persistido no registro do
+    atestado (decisão de LGPD já documentada — só existe, quando informado
+    na emissão, para preencher o PDF via `src/documento_pdf.py`), então esta
+    função nunca é chamada na prática; existe para o dia em que `atestado`
+    eventualmente carregar um `cpf` sem precisar mudar o call site.
+    """
+    digitos = "".join(c for c in cpf if c.isdigit())
+    if len(digitos) != 11:
+        return cpf
+    return f"{digitos[0:3]}.***.***-{digitos[9:11]}"
+
+
 def _campo_dado_publico(rotulo: str, valor: str) -> None:
     """
     Igual a `_campo_dado`, mas usando as variáveis CSS de tema claro/escuro da
@@ -910,22 +928,46 @@ def _campo_dado_publico(rotulo: str, valor: str) -> None:
     )
 
 
-def _campo_cid_protegido_publico() -> None:
-    """Igual a `_campo_cid_protegido`, mas com as variáveis CSS da página pública (ver `_campo_dado_publico`)."""
-    icone = _svg("lock", 14, "var(--pub-texto)", "opacity:0.45; margin-right:0.375rem; flex-shrink:0")
-    st.markdown(
-        f"""
-        <div style="margin-bottom:1.25rem; font-family:'Nunito Sans',sans-serif;">
-            <div style="color:var(--pub-texto); opacity:0.6; font-size:0.75rem; font-weight:600;
-                        letter-spacing:0.04em; text-transform:uppercase; margin-bottom:0.25rem;">Diagnóstico (CID)</div>
-            <div style="color:var(--pub-texto); font-size:0.9375rem; font-weight:600;
-                        display:flex; align-items:center; opacity:0.65;">
-                {icone}<span>Protegido por sigilo médico</span>
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+def _campo_cid_toggle_publico(cid: str, codigo: str) -> None:
+    """
+    Campo do CID na página pública: oculto por padrão (ícone de cadeado +
+    "Protegido por sigilo médico"), com um botão para quem está consultando
+    revelar o diagnóstico nesta própria visualização ("Mostrar
+    diagnóstico"/"Ocultar"). O estado do toggle fica só em `st.session_state`
+    (não é persistido em lugar nenhum) e começa sempre oculto a cada nova
+    consulta/recarregamento.
+    """
+    chave_mostrar = f"pub_cid_visivel_{codigo}"
+    mostrar = st.session_state.get(chave_mostrar, False)
+    with st.container(key=f"pub-cid-{codigo}"):
+        st.markdown(
+            f'<div style="color:var(--pub-texto); opacity:0.6; font-size:0.75rem; font-weight:600; '
+            f'letter-spacing:0.04em; text-transform:uppercase; margin-bottom:0.25rem; '
+            f'font-family:\'Nunito Sans\',sans-serif;">Diagnóstico (CID)</div>',
+            unsafe_allow_html=True,
+        )
+        if mostrar:
+            icone = _svg("unlock", 14, "var(--pub-texto)", "opacity:0.5; margin-right:0.375rem; flex-shrink:0")
+            st.markdown(
+                f'<div style="color:var(--pub-texto); font-size:1.1875rem; font-weight:700; '
+                f'display:flex; align-items:center; margin-bottom:0.5rem; '
+                f'font-family:\'Nunito Sans\',sans-serif;">{icone}<span>{html.escape(cid)}</span></div>',
+                unsafe_allow_html=True,
+            )
+            if st.button("Ocultar", key=f"pub_cid_ocultar_{codigo}", type="secondary"):
+                st.session_state[chave_mostrar] = False
+                st.rerun()
+        else:
+            icone = _svg("lock", 14, "var(--pub-texto)", "opacity:0.45; margin-right:0.375rem; flex-shrink:0")
+            st.markdown(
+                f'<div style="color:var(--pub-texto); font-size:0.9375rem; font-weight:600; '
+                f'display:flex; align-items:center; opacity:0.65; margin-bottom:0.5rem; '
+                f'font-family:\'Nunito Sans\',sans-serif;">{icone}<span>Protegido por sigilo médico</span></div>',
+                unsafe_allow_html=True,
+            )
+            if st.button("Mostrar diagnóstico", key=f"pub_cid_mostrar_{codigo}", type="secondary"):
+                st.session_state[chave_mostrar] = True
+                st.rerun()
 
 
 def _bloco_como_funciona() -> None:
@@ -1351,6 +1393,41 @@ def _formatar_periodo(row: dict) -> str:
     return "—"
 
 
+def _data_br(data_iso: str) -> str:
+    """Converte 'AAAA-MM-DD' para 'DD/MM/AAAA'; devolve como veio se não bater com o formato."""
+    try:
+        return datetime.strptime(data_iso, "%Y-%m-%d").strftime("%d/%m/%Y")
+    except (ValueError, TypeError):
+        return str(data_iso or "")
+
+
+def _linha_emissao_dias(atestado: dict) -> str:
+    """Data de emissão + dias de afastamento numa linha só (ex.: '26/07/2026 · 1 dia(s)') para a página pública."""
+    data_formatada = _data_br(atestado.get("data_emissao") or "")
+    dias = atestado.get("dias_afastamento")
+    return f"{data_formatada} · {dias} dia(s)" if dias else data_formatada
+
+
+_MESES_ABREV_PT = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"]
+
+
+def _ultimos_n_meses(n: int, referencia: date) -> list[str]:
+    """Lista de 'AAAA-MM' dos últimos n meses (mais antigo primeiro), incluindo o mês de referência."""
+    chaves = []
+    ano, mes = referencia.year, referencia.month
+    for _ in range(n):
+        chaves.append(f"{ano:04d}-{mes:02d}")
+        mes -= 1
+        if mes == 0:
+            mes, ano = 12, ano - 1
+    return list(reversed(chaves))
+
+
+def _rotulo_mes_abreviado(chave_aaaa_mm: str) -> str:
+    ano, mes = chave_aaaa_mm.split("-")
+    return f"{_MESES_ABREV_PT[int(mes) - 1]}/{ano[2:]}"
+
+
 def _gerar_csv(atestados: list[dict]) -> bytes:
     """Gera CSV (apenas apresentação/exportação — não altera a fonte de dados)."""
     buf = io.StringIO()
@@ -1572,15 +1649,14 @@ def tela_verificacao(codigo: str) -> None:
                             unsafe_allow_html=True,
                         )
                         with st.container(border=True):
-                            col1, col2 = st.columns(2)
-                            with col1:
-                                _campo_dado_publico("Médico", atestado["nome_medico"])
-                                _campo_dado_publico("CRM", atestado["crm"])
-                                _campo_dado_publico("Data de emissão", atestado["data_emissao"])
-                            with col2:
-                                _campo_dado_publico("Paciente", atestado["nome_paciente"])
-                                _campo_cid_protegido_publico()
-                                _campo_dado_publico("Período de afastamento", _formatar_periodo(atestado))
+                            _campo_dado_publico("Paciente", atestado["nome_paciente"])
+                            cpf_atestado = atestado.get("cpf")
+                            if cpf_atestado:
+                                _campo_dado_publico("CPF", _mascarar_cpf(cpf_atestado))
+                            _campo_dado_publico("Emissão", _linha_emissao_dias(atestado))
+                            _campo_cid_toggle_publico(atestado["cid"], codigo)
+                            _campo_dado_publico("Médico", atestado["nome_medico"])
+                            _campo_dado_publico("CRM", atestado["crm"])
 
                         _bloco_metadados_verificacao(codigo)
 
@@ -2415,20 +2491,46 @@ def tela_dashboard() -> None:
     # -----------------------------------------------------------------------
     # Gráfico — atestados emitidos por mês
     # -----------------------------------------------------------------------
-    if atestados:
-        with st.container(border=True):
-            st.markdown(
-                f'<p style="color:{COR_TEXTO}; font-weight:700; font-size:0.9375rem; '
-                f'font-family:\'Nunito Sans\',sans-serif; margin-bottom:0.5rem; opacity:0.85;">'
-                f'Atestados emitidos por mês</p>',
-                unsafe_allow_html=True,
-            )
-            contagem_por_mes: dict[str, int] = {}
-            for a in atestados:
-                mes = a["data_emissao"][:7]
-                contagem_por_mes[mes] = contagem_por_mes.get(mes, 0) + 1
-            meses_ordenados = dict(sorted(contagem_por_mes.items()))
-            st.bar_chart(meses_ordenados, color=COR_PRIMARIA, use_container_width=True)
+    with st.container(border=True):
+        st.markdown(
+            f'<p style="color:{COR_TEXTO}; font-weight:700; font-size:0.8125rem; '
+            f'font-family:\'Nunito Sans\',sans-serif; margin-bottom:0.75rem; opacity:0.7;">'
+            f'Atestados emitidos por mês (últimos 6 meses)</p>',
+            unsafe_allow_html=True,
+        )
+        contagem_por_mes: dict[str, int] = {}
+        for a in atestados:
+            mes = a["data_emissao"][:7]
+            contagem_por_mes[mes] = contagem_por_mes.get(mes, 0) + 1
+
+        chaves_meses = _ultimos_n_meses(6, hoje)
+        rotulos_meses = [_rotulo_mes_abreviado(c) for c in chaves_meses]
+        dados_grafico = pd.DataFrame({
+            "mes": rotulos_meses,
+            "quantidade": [contagem_por_mes.get(c, 0) for c in chaves_meses],
+        })
+
+        maximo = int(dados_grafico["quantidade"].max())
+        teto_y = maximo + max(1, round(maximo * 0.25)) if maximo > 0 else 1
+
+        base_grafico = alt.Chart(dados_grafico).encode(
+            x=alt.X("mes:N", sort=rotulos_meses, title=None, axis=alt.Axis(labelAngle=0, grid=False)),
+        )
+        barras = base_grafico.mark_bar(
+            size=26, color=COR_PRIMARIA, cornerRadiusTopLeft=3, cornerRadiusTopRight=3,
+        ).encode(
+            y=alt.Y(
+                "quantidade:Q", title=None,
+                scale=alt.Scale(domain=[0, teto_y]),
+                axis=alt.Axis(grid=True, tickMinStep=1, format="d"),
+            ),
+        )
+        rotulos_valor = base_grafico.mark_text(dy=-8, color=COR_TEXTO, fontWeight="bold", fontSize=12).encode(
+            y="quantidade:Q",
+            text="quantidade:Q",
+        )
+        grafico = (barras + rotulos_valor).properties(height=220).configure_view(strokeWidth=0)
+        st.altair_chart(grafico, use_container_width=True)
 
     st.write("")
     st.divider()
@@ -2793,19 +2895,6 @@ def tela_dashboard() -> None:
 
                 if status_atestado != "anonimizado":
                     _secao_documento_pdf(a, codigo_atestado, url)
-
-    st.write("")
-    st.divider()
-
-    icone_api = _svg("plug", 17, COR_PRIMARIA, "margin-right:0.5rem; vertical-align:middle; flex-shrink:0")
-    st.markdown(
-        f'<h3 style="color:{COR_PRIMARIA}; margin-bottom:1rem; display:flex; align-items:center; '
-        f'font-family:\'Nunito Sans\',sans-serif; font-size:1.0625rem; font-weight:800; letter-spacing:-0.005em;">'
-        f'{icone_api} Registro automático (API)</h3>',
-        unsafe_allow_html=True,
-    )
-    _secao_token_api(conta_atual, quem_gerencia="medico")
-    _secao_api_integracoes()
 
     _rodape()
 

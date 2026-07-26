@@ -1,4 +1,6 @@
 streamlit>=1.59.2
+pandas
+altair
 pytesseract
 pyzbar
 opencv-python-headless
