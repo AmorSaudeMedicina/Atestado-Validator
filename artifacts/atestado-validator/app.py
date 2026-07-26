@@ -22,8 +22,6 @@ import time
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
-import altair as alt
-import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
 
@@ -2503,34 +2501,33 @@ def tela_dashboard() -> None:
             mes = a["data_emissao"][:7]
             contagem_por_mes[mes] = contagem_por_mes.get(mes, 0) + 1
 
+        # Sempre os últimos 6 meses, mesmo com zero em alguns — evita o
+        # visual de "barra isolada" com poucos dados. st.bar_chart (nativo do
+        # Streamlit, sem dependência extra) já escolhe uma escala do eixo Y
+        # com folga acima do maior valor e barras finas/espaçadas quando há
+        # várias categorias como aqui (6 meses fixos, em vez de só os meses
+        # com dado).
         chaves_meses = _ultimos_n_meses(6, hoje)
         rotulos_meses = [_rotulo_mes_abreviado(c) for c in chaves_meses]
-        dados_grafico = pd.DataFrame({
-            "mes": rotulos_meses,
-            "quantidade": [contagem_por_mes.get(c, 0) for c in chaves_meses],
-        })
+        valores_meses = [contagem_por_mes.get(c, 0) for c in chaves_meses]
+        dados_grafico = dict(zip(rotulos_meses, valores_meses))
 
-        maximo = int(dados_grafico["quantidade"].max())
-        teto_y = maximo + max(1, round(maximo * 0.25)) if maximo > 0 else 1
+        st.bar_chart(dados_grafico, color=COR_PRIMARIA, sort=False, use_container_width=True, height=220)
 
-        base_grafico = alt.Chart(dados_grafico).encode(
-            x=alt.X("mes:N", sort=rotulos_meses, title=None, axis=alt.Axis(labelAngle=0, grid=False)),
+        # st.bar_chart não desenha rótulo de valor em cima da barra (isso só
+        # dá para fazer com Altair como biblioteca separada — evitado de
+        # propósito para não adicionar dependência nova ao projeto). Em vez
+        # disso, os valores exatos aparecem aqui embaixo, na mesma ordem dos
+        # meses do gráfico (e também no hover/tooltip do próprio gráfico).
+        resumo_valores = "  ·  ".join(
+            f"{rotulo}: <strong>{valor}</strong>" for rotulo, valor in zip(rotulos_meses, valores_meses)
         )
-        barras = base_grafico.mark_bar(
-            size=26, color=COR_PRIMARIA, cornerRadiusTopLeft=3, cornerRadiusTopRight=3,
-        ).encode(
-            y=alt.Y(
-                "quantidade:Q", title=None,
-                scale=alt.Scale(domain=[0, teto_y]),
-                axis=alt.Axis(grid=True, tickMinStep=1, format="d"),
-            ),
+        st.markdown(
+            f'<p style="color:{COR_TEXTO}; font-size:0.75rem; opacity:0.65; '
+            f'font-family:\'Nunito Sans\',sans-serif; margin-top:0.5rem; margin-bottom:0;">'
+            f'{resumo_valores}</p>',
+            unsafe_allow_html=True,
         )
-        rotulos_valor = base_grafico.mark_text(dy=-8, color=COR_TEXTO, fontWeight="bold", fontSize=12).encode(
-            y="quantidade:Q",
-            text="quantidade:Q",
-        )
-        grafico = (barras + rotulos_valor).properties(height=220).configure_view(strokeWidth=0)
-        st.altair_chart(grafico, use_container_width=True)
 
     st.write("")
     st.divider()
