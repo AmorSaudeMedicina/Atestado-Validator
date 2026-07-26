@@ -97,6 +97,15 @@ _MIGRACOES_COLUNAS_USUARIOS = [
     ("deve_trocar_senha", "INTEGER NOT NULL DEFAULT 0"),
     ("tentativas_login_falhas", "INTEGER NOT NULL DEFAULT 0"),
     ("bloqueado_ate", "TEXT"),
+    # Endereço/telefone da clínica do médico — opcionais, usados só para
+    # preencher o rodapé do PDF do atestado (ver src/documento_pdf.py). Sem
+    # nenhum deles preenchido, o rodapé simplesmente omite as linhas
+    # correspondentes (nunca mostra rótulo vazio).
+    ("endereco_rua", "TEXT"),
+    ("endereco_cidade", "TEXT"),
+    ("endereco_estado", "TEXT"),
+    ("endereco_cep", "TEXT"),
+    ("endereco_telefone", "TEXT"),
 ]
 
 # ---------------------------------------------------------------------------
@@ -352,6 +361,11 @@ def criar_usuario(
     especialidade: Optional[str] = None,
     ativo: bool = True,
     deve_trocar_senha: bool = False,
+    endereco_rua: Optional[str] = None,
+    endereco_cidade: Optional[str] = None,
+    endereco_estado: Optional[str] = None,
+    endereco_cep: Optional[str] = None,
+    endereco_telefone: Optional[str] = None,
 ) -> None:
     """
     Cria uma nova conta. `perfil` deve ser 'admin' ou 'medico'.
@@ -359,17 +373,26 @@ def criar_usuario(
     `deve_trocar_senha=True` força a troca de senha no próximo login bem
     sucedido dessa conta (usado no seed do administrador inicial).
 
+    `endereco_*` são opcionais e só usados (quando `perfil='medico'`) para
+    preencher o rodapé do PDF do atestado — ver src/documento_pdf.py.
+
     Levanta sqlite3.IntegrityError se `usuario` já existir — o chamador deve
     tratar esse caso (ex.: exibir "nome de usuário já em uso").
     """
     sql = """
-        INSERT INTO usuarios (usuario, senha_hash, nome, perfil, crm, especialidade, ativo, deve_trocar_senha)
-        VALUES (?,?,?,?,?,?,?,?)
+        INSERT INTO usuarios (
+            usuario, senha_hash, nome, perfil, crm, especialidade, ativo, deve_trocar_senha,
+            endereco_rua, endereco_cidade, endereco_estado, endereco_cep, endereco_telefone
+        )
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
     """
     with _conectar() as conn:
         conn.execute(
             sql,
-            (usuario, senha_hash, nome, perfil, crm, especialidade, int(ativo), int(deve_trocar_senha)),
+            (
+                usuario, senha_hash, nome, perfil, crm, especialidade, int(ativo), int(deve_trocar_senha),
+                endereco_rua, endereco_cidade, endereco_estado, endereco_cep, endereco_telefone,
+            ),
         )
         conn.commit()
 
@@ -396,6 +419,14 @@ def listar_medicos() -> list[dict]:
     with _conectar() as conn:
         rows = conn.execute(sql).fetchall()
     return [dict(r) for r in rows]
+
+
+def buscar_medico_por_crm(crm: str) -> Optional[dict]:
+    """Retorna a conta de médico pelo CRM (usada para buscar o endereço atual ao gerar/tentar novamente o PDF), ou None."""
+    sql = "SELECT * FROM usuarios WHERE perfil = 'medico' AND crm = ?"
+    with _conectar() as conn:
+        row = conn.execute(sql, (crm,)).fetchone()
+    return dict(row) if row else None
 
 
 def definir_status_usuario(usuario_id: int, ativo: bool) -> bool:

@@ -77,6 +77,22 @@ def _diretorio_documentos() -> Path:
     return caminho
 
 
+def _linha_endereco(endereco_rua: Optional[str], endereco_cidade: Optional[str], endereco_estado: Optional[str]) -> Optional[str]:
+    """Combina rua + 'cidade-UF' num só texto, omitindo as partes ausentes. None se não houver nada."""
+    partes = []
+    if endereco_rua and endereco_rua.strip():
+        partes.append(endereco_rua.strip())
+    cidade = (endereco_cidade or "").strip()
+    estado = (endereco_estado or "").strip()
+    if cidade and estado:
+        partes.append(f"{cidade}-{estado}")
+    elif cidade:
+        partes.append(cidade)
+    elif estado:
+        partes.append(estado)
+    return ", ".join(partes) if partes else None
+
+
 def _montar_html(
     *,
     nome: str,
@@ -88,18 +104,41 @@ def _montar_html(
     nome_medico: str,
     crm: str,
     qr_base64: str,
+    endereco_rua: Optional[str] = None,
+    endereco_cidade: Optional[str] = None,
+    endereco_estado: Optional[str] = None,
+    endereco_cep: Optional[str] = None,
+    endereco_telefone: Optional[str] = None,
 ) -> str:
     """
     Monta o HTML/CSS do atestado — layout fiel ao template oficial (fundo
     branco, faixa de título verde-água, corpo justificado, bloco de
     assinatura + QR alinhado à direita, rodapé verde-água com endereço e
-    horário). Todo texto vindo do usuário (nome, cpf, cid, médico, crm) é
-    escapado antes de entrar no HTML.
+    horário). Todo texto vindo do usuário (nome, cpf, cid, médico, crm,
+    endereço) é escapado antes de entrar no HTML.
+
+    O endereço/telefone do rodapé vêm do cadastro do médico que emitiu o
+    atestado (`endereco_*`) — todos opcionais; cada linha do rodapé só
+    aparece se houver dado para ela (nunca mostra rótulo vazio).
     """
     e = html.escape
     logo = _logo_base64()
     logo_tag = f'<img src="{logo}" alt="AmorSaúde">' if logo else '<span class="logo-texto">AmorSaúde</span>'
     logo_tag_pequena = f'<img class="logo-pequena" src="{logo}" alt="AmorSaúde">' if logo else ""
+
+    linha_endereco = _linha_endereco(endereco_rua, endereco_cidade, endereco_estado)
+    cep = (endereco_cep or "").strip()
+    telefone = (endereco_telefone or "").strip()
+
+    linhas_endereco_html = ""
+    if linha_endereco or cep:
+        linhas_endereco_html = '<div>Endereço:</div>'
+        if linha_endereco:
+            linhas_endereco_html += f'<div>{e(linha_endereco)}</div>'
+        if cep:
+            linhas_endereco_html += f'<div>CEP: {e(cep)}</div>'
+
+    linha_telefone_html = f'<div>Telefone: {e(telefone)}</div>' if telefone else ""
 
     return f"""<!DOCTYPE html>
 <html lang="pt-BR">
@@ -108,11 +147,16 @@ def _montar_html(
 <style>
     @page {{ size: A4; margin: 0; }}
     * {{ box-sizing: border-box; }}
+    html {{ height: 297mm; }}
     body {{
         margin: 0;
+        min-height: 297mm;
+        display: flex;
+        flex-direction: column;
         font-family: 'DejaVu Sans', Arial, sans-serif;
         color: {_COR_TEXTO};
     }}
+    .conteudo-principal {{ flex: 1 0 auto; }}
     .cabecalho {{
         padding: 30px 44px 18px 44px;
         background: #FFFFFF;
@@ -164,22 +208,19 @@ def _montar_html(
     .assinatura-texto img.logo-pequena {{ height: 15px; margin: 3px 0; }}
     .qr-code img {{ width: 120px; height: 120px; display: block; }}
     .icone-decorativo {{
-        width: 26px;
-        height: 26px;
+        width: 14px;
+        height: 14px;
         border-radius: 50%;
         background: {_COR_PRIMARIA};
         color: #FFFFFF;
         text-align: center;
-        line-height: 26px;
-        font-size: 15px;
+        line-height: 14px;
+        font-size: 9px;
         font-weight: 700;
-        margin: 20px auto 0 auto;
+        margin: 14px auto 0 auto;
     }}
     .rodape {{
-        position: fixed;
-        bottom: 0;
-        left: 0;
-        right: 0;
+        flex-shrink: 0;
         background: {_COR_PRIMARIA};
         color: #FFFFFF;
         padding: 16px 44px;
@@ -192,50 +233,50 @@ def _montar_html(
 </style>
 </head>
 <body>
-    <div class="cabecalho">{logo_tag}</div>
-    <div class="linha-separadora"></div>
-    <div class="faixa-titulo"><h1>Atestado Médico</h1></div>
-    <div class="corpo">
-        <p class="paragrafo-principal">
-            Atesto para os devidos fins que {e(nome)} inscrito(a) sob CPF de N° {e(cpf)}
-            o(a) paciente esteve sob meus cuidados no dia {e(data_inicio_br)}, necessitando de
-            {e(dias)} Dia(s) de afastamento de todas suas atividades laborais por motivo de CID {e(cid)}
-        </p>
-        <div class="espaco-grande"></div>
-        <p class="observacao">
-            <strong>Observação:</strong> Este atestado foi emitido de forma digital, com validade
-            legal, e assinado por meio de certificado digital. Para garantir sua autenticidade, o
-            documento deve conter QR Code legível e não apresentar qualquer tipo de rasura ou alteração.
-        </p>
-        <div class="espaco-grande"></div>
-        <div class="local-data">
-            <span>{e(_CIDADE_UF_PADRAO)}</span>
-            <span>{e(data_emissao_br)}</span>
-        </div>
-        <div class="espaco-grande"></div>
-        <div class="bloco-assinatura">
-            <div class="assinatura-texto">
-                <div class="nome-medico">{e(nome_medico)}</div>
-                <div>{e(crm)}</div>
-                {logo_tag_pequena}
-                <div>Verifique a autenticidade escaneando o Qr Code.</div>
-                <div>Assinado Digitalmente pela plataforma App.AmorSaude.</div>
-                <div><strong>Emitido em {e(data_emissao_br)}</strong></div>
+    <div class="conteudo-principal">
+        <div class="cabecalho">{logo_tag}</div>
+        <div class="linha-separadora"></div>
+        <div class="faixa-titulo"><h1>Atestado Médico</h1></div>
+        <div class="corpo">
+            <p class="paragrafo-principal">
+                Atesto para os devidos fins que {e(nome)} inscrito(a) sob CPF de N° {e(cpf)}
+                o(a) paciente esteve sob meus cuidados no dia {e(data_inicio_br)}, necessitando de
+                {e(dias)} Dia(s) de afastamento de todas suas atividades laborais por motivo de CID {e(cid)}
+            </p>
+            <div class="espaco-grande"></div>
+            <p class="observacao">
+                <strong>Observação:</strong> Este atestado foi emitido de forma digital, com validade
+                legal, e assinado por meio de certificado digital. Para garantir sua autenticidade, o
+                documento deve conter QR Code legível e não apresentar qualquer tipo de rasura ou alteração.
+            </p>
+            <div class="espaco-grande"></div>
+            <div class="local-data">
+                <span>{e(_CIDADE_UF_PADRAO)}</span>
+                <span>{e(data_emissao_br)}</span>
             </div>
-            <div class="qr-code"><img src="{qr_base64}" alt="QR Code"></div>
+            <div class="espaco-grande"></div>
+            <div class="bloco-assinatura">
+                <div class="assinatura-texto">
+                    <div class="nome-medico">{e(nome_medico)}</div>
+                    <div>{e(crm)}</div>
+                    {logo_tag_pequena}
+                    <div>Verifique a autenticidade escaneando o Qr Code.</div>
+                    <div>Assinado Digitalmente pela plataforma App.AmorSaude.</div>
+                    <div><strong>Emitido em {e(data_emissao_br)}</strong></div>
+                </div>
+                <div class="qr-code"><img src="{qr_base64}" alt="QR Code"></div>
+            </div>
+            <div class="icone-decorativo">+</div>
         </div>
-        <div class="icone-decorativo">+</div>
     </div>
     <div class="rodape">
         <div class="esquerda">
-            <div>Endereço:</div>
-            <div>Rua Lafaiete, 1100, Centro, Ribeirão Preto-SP</div>
-            <div>CEP: 14015-080</div>
+            {linhas_endereco_html}
         </div>
         <div class="direita">
             <div>Horário de funcionamento Segunda à sexta das 08:00 às 20:00 Sábado e</div>
             <div>Domingo das 08:00 às 18:00</div>
-            <div>Telefone: (16) 3234-7750</div>
+            {linha_telefone_html}
         </div>
     </div>
 </body>
@@ -262,6 +303,11 @@ def _gerar_documento(
     crm: str,
     qr_png: bytes,
     origem: str,
+    endereco_rua: Optional[str] = None,
+    endereco_cidade: Optional[str] = None,
+    endereco_estado: Optional[str] = None,
+    endereco_cep: Optional[str] = None,
+    endereco_telefone: Optional[str] = None,
 ) -> None:
     """
     Roda a pipeline completa (montar HTML → renderizar PDF → salvar cifrado)
@@ -282,6 +328,11 @@ def _gerar_documento(
             nome_medico=nome_medico,
             crm=crm,
             qr_base64=qr_base64,
+            endereco_rua=endereco_rua,
+            endereco_cidade=endereco_cidade,
+            endereco_estado=endereco_estado,
+            endereco_cep=endereco_cep,
+            endereco_telefone=endereco_telefone,
         )
 
         caminho = _diretorio_documentos() / f"{codigo}.pdf.enc"
@@ -308,6 +359,11 @@ def disparar_geracao_documento(
     crm: str,
     qr_png: bytes,
     origem: str,
+    endereco_rua: Optional[str] = None,
+    endereco_cidade: Optional[str] = None,
+    endereco_estado: Optional[str] = None,
+    endereco_cep: Optional[str] = None,
+    endereco_telefone: Optional[str] = None,
 ) -> None:
     """
     Dispara a geração do PDF em segundo plano (thread daemon) — nunca
@@ -316,6 +372,10 @@ def disparar_geracao_documento(
     Se `cpf` vier vazio/None, não faz nada: o CPF só existe para preencher o
     documento (nunca é salvo no registro do atestado — decisão de LGPD já
     documentada), e sem ele não há como preencher o template.
+
+    `endereco_*` vêm do cadastro do médico que emitiu o atestado — todos
+    opcionais; ver `_montar_html` para a regra de omitir linhas vazias no
+    rodapé.
     """
     if not cpf or not cpf.strip():
         return
@@ -334,6 +394,11 @@ def disparar_geracao_documento(
             "crm": crm,
             "qr_png": qr_png,
             "origem": origem,
+            "endereco_rua": endereco_rua,
+            "endereco_cidade": endereco_cidade,
+            "endereco_estado": endereco_estado,
+            "endereco_cep": endereco_cep,
+            "endereco_telefone": endereco_telefone,
         },
         daemon=True,
         name=f"pdf-doc-{codigo[:8]}",

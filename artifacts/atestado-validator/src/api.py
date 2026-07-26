@@ -194,6 +194,11 @@ def registrar_atestado_core(medico: dict, corpo: dict, origem: str, request: Req
         crm=medico["crm"],
         qr_png=gerar_qr(url_verificacao(codigo, request)),
         origem=origem,
+        endereco_rua=medico.get("endereco_rua"),
+        endereco_cidade=medico.get("endereco_cidade"),
+        endereco_estado=medico.get("endereco_estado"),
+        endereco_cep=medico.get("endereco_cep"),
+        endereco_telefone=medico.get("endereco_telefone"),
     )
 
     return {

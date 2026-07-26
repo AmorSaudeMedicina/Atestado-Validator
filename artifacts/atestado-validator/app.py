@@ -46,6 +46,7 @@ from src.documento_pdf import disparar_geracao_documento, ler_documento
 from src.database import (
     buscar_atestado_por_codigo,
     buscar_documento,
+    buscar_medico_por_crm,
     buscar_usuario_por_login,
     contar_oauth_access_tokens_ativos,
     criar_usuario,
@@ -1457,6 +1458,7 @@ def _secao_documento_pdf_concluido(
                 if not cpf_retry.strip():
                     st.error("Informe o CPF para gerar o documento.")
                 else:
+                    medico_do_atestado = buscar_medico_por_crm(atestado.get("crm") or "") or {}
                     disparar_geracao_documento(
                         codigo,
                         nome=atestado.get("nome_paciente") or "",
@@ -1469,6 +1471,11 @@ def _secao_documento_pdf_concluido(
                         crm=atestado.get("crm") or "",
                         qr_png=gerar_qr(url_verificacao_atestado),
                         origem=ORIGEM_PDF_RETRY,
+                        endereco_rua=medico_do_atestado.get("endereco_rua"),
+                        endereco_cidade=medico_do_atestado.get("endereco_cidade"),
+                        endereco_estado=medico_do_atestado.get("endereco_estado"),
+                        endereco_cep=medico_do_atestado.get("endereco_cep"),
+                        endereco_telefone=medico_do_atestado.get("endereco_telefone"),
                     )
                     st.session_state.pop(chave_retry_aberto, None)
                     st.success("Gerando o PDF — atualize a página em alguns instantes.")
@@ -1828,6 +1835,16 @@ def tela_admin() -> None:
             type="password",
             help="O médico poderá usar essa senha no primeiro acesso. A senha é guardada com hash, nunca em texto puro.",
         )
+        with st.expander("Endereço da clínica (opcional)"):
+            st.caption("Aparece no rodapé do PDF do atestado. Campos em branco simplesmente não aparecem.")
+            endereco_medico = st.text_input("Endereço (rua, número)", placeholder="ex.: Rua Lafaiete, 1100, Centro")
+            col_c, col_d = st.columns(2)
+            with col_c:
+                cidade_medico = st.text_input("Cidade", placeholder="ex.: Ribeirão Preto")
+                cep_medico = st.text_input("CEP", placeholder="ex.: 14015-080")
+            with col_d:
+                estado_medico = st.text_input("Estado (UF)", placeholder="ex.: SP")
+                telefone_medico = st.text_input("Telefone", placeholder="ex.: (16) 3234-7750")
         criar = st.form_submit_button("Criar conta de médico", use_container_width=True, type="primary")
 
     if criar:
@@ -1854,6 +1871,11 @@ def tela_admin() -> None:
                     perfil="medico",
                     crm=crm_medico.strip(),
                     especialidade=especialidade_medico.strip() or None,
+                    endereco_rua=endereco_medico.strip() or None,
+                    endereco_cidade=cidade_medico.strip() or None,
+                    endereco_estado=estado_medico.strip() or None,
+                    endereco_cep=cep_medico.strip() or None,
+                    endereco_telefone=telefone_medico.strip() or None,
                 )
                 registrar_evento(
                     EVENTO_MEDICO_CRIADO,
@@ -2550,6 +2572,11 @@ def tela_dashboard() -> None:
                 crm=medico["crm"],
                 qr_png=qr_bytes,
                 origem=ORIGEM_FORMULARIO,
+                endereco_rua=medico.get("endereco_rua"),
+                endereco_cidade=medico.get("endereco_cidade"),
+                endereco_estado=medico.get("endereco_estado"),
+                endereco_cep=medico.get("endereco_cep"),
+                endereco_telefone=medico.get("endereco_telefone"),
             )
 
             # Rebusca a lista (capturada mais acima, antes desta emissão) para

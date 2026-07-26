@@ -75,7 +75,10 @@ veredito de "fraude confirmada".
   sessões, telas protegidas, "fail-closed".
 - **Painel do admin:** criar/listar médicos, **ativar/desativar**, **redefinir senha**.
   Admin inicial criado a partir de `ADMIN_INITIAL_PASSWORD` (ou senha aleatória forte
-  gerada no primeiro boot, ver seção de variáveis de ambiente).
+  gerada no primeiro boot, ver seção de variáveis de ambiente). O cadastro de médico
+  tem também um bloco **opcional** de endereço da clínica (rua/número, cidade, UF,
+  CEP, telefone) — usado só para preencher o rodapé do PDF do atestado (seção 5.1);
+  sem preencher, o rodapé simplesmente omite as linhas correspondentes.
 - **Segurança/LGPD — Parte 1 (acesso/login), concluída:** nenhuma credencial aparece
   na tela, exigência de senha forte, bloqueio de conta por tentativas de login
   incorretas, expiração de sessão, e troca de senha obrigatória no primeiro login do admin.
@@ -195,8 +198,17 @@ Dados variáveis por atestado, passados para `disparar_geracao_documento()`:
 nome e CPF do paciente, data de início, dias de afastamento, CID, data de
 emissão, nome do médico e CRM (esses dois últimos vêm do registro do próprio
 atestado — cada atestado mostra o médico que realmente o emitiu, não um nome
-fixo). A cidade/UF impressa no documento é fixa ("Ribeirão Preto, - São
-Paulo") — não há campo de cidade da clínica no cadastro do médico hoje.
+fixo). A cidade/UF impressa no CORPO do documento (linha de local/data, perto
+da assinatura) é fixa ("Ribeirão Preto, - São Paulo"). Já o **endereço/CEP/
+telefone do RODAPÉ** vêm do cadastro do médico (`endereco_rua`,
+`endereco_cidade`, `endereco_estado`, `endereco_cep`, `endereco_telefone` —
+colunas opcionais em `usuarios`, preenchidas no formulário "Cadastrar médico"
+do admin, ver seção 3): cada linha do rodapé só aparece se o campo
+correspondente estiver preenchido (nunca mostra um rótulo vazio); sem nenhum
+deles, a coluna de endereço do rodapé fica em branco (só o horário de
+funcionamento, que é fixo, continua aparecendo). O rodapé usa
+`flex: 1 0 auto` no bloco de conteúdo acima dele (não `position: fixed`) para
+ficar sempre colado ao final da página A4, inclusive em documentos curtos.
 
 **Dependência de sistema:** weasyprint precisa das bibliotecas nativas do
 Pango/GObject/fontconfig para importar (ver `Dockerfile` — `libpango-1.0-0`,
@@ -280,9 +292,10 @@ Numa conversa da Claude com os conectores **"AmorSaude Validação" (MCP)** + **
 - **PDF automático:** hoje o status só aparece no dashboard do médico — considerar
   expor também na resposta da API/MCP (ex.: um campo `documento_status`) se fizer
   sentido para quem integra via API/MCP/Make/Zapier.
-- **Cidade/UF da clínica no PDF:** hoje fixa em "Ribeirão Preto, - São Paulo" no
-  template do atestado (`src/documento_pdf.py`) — considerar um campo no cadastro
-  do médico/clínica se algum dia houver mais de uma unidade.
+- **Cidade/UF do CORPO do PDF:** hoje fixa em "Ribeirão Preto, - São Paulo" na
+  linha de local/data perto da assinatura (`src/documento_pdf.py`) — diferente
+  do endereço do RODAPÉ, que já é por médico (ver seção 5.1). Considerar puxar
+  também essa linha do cadastro do médico se algum dia houver mais de uma unidade.
 
 ## 9. Como trabalhar neste projeto (preferências)
 - Explicar em linguagem simples (o "porquê", não só o "como") — o dono não é dev experiente.
