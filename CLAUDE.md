@@ -133,9 +133,18 @@ veredito de "fraude confirmada".
   deixava a critério de quem consultava). A censura do CPF é aplicada em
   `_preparar_dados_verificacao_publica()` (o dict que chega na renderização
   já vem com o valor mascarado — nunca o CPF completo escondido só por
-  CSS). Cabeçalho no estilo do site oficial (amorsaude.com.br): fundo
-  branco, logo à esquerda, linha fina de separação — diferente do fundo
-  verde-água claro do restante da página. Título da aba do navegador só
+  CSS). Cabeçalho no estilo do site oficial (amorsaude.com.br): faixa
+  branca (#FFFFFF fixo, não varia com tema claro/escuro) de **largura
+  total da página** (técnica CSS "full bleed" — `position:relative;
+  left:50%; margin-left:-50vw; width:100vw`, necessária porque
+  `layout="centered"` limita o container padrão do Streamlit a uma coluna
+  central), só com a logo centralizada em altura fixa de 48px (forçada via
+  CSS, `.amorsaude-cabecalho-publico img`), linha fina de separação abaixo
+  (`#E0E0E0`) — diferente do fundo verde-água claro do restante da
+  página. A barra nativa do Streamlit (`stHeader`, botão "Deploy") e o
+  padding-top padrão do container ficam escondidos/zerados só nesta tela
+  (`.stApp:has(.st-key-pagina-publica)`), para o cabeçalho ficar colado no
+  topo de verdade. Título da aba do navegador só
   nesta tela ("AmorSaúde — Validador de Atestados"), via
   `_definir_titulo_aba_publica()`/`components.html()` (`st.set_page_config()`
   é global ao processo, não dá para variar por tela). Inclui metadados de

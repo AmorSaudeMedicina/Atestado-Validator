@@ -519,14 +519,47 @@ def _injetar_estilo() -> None:
             margin-top: 1.5rem !important;
         }}
 
-        /* Cabeçalho da página pública — sóbrio, sem "cartão flutuante":
-           logo centralizada sobre o fundo da própria página. */
+        /* Cabeçalho da página pública — largura total (100vw), fundo branco
+           fixo (#FFFFFF, sempre, independente do tema claro/escuro do
+           restante da página), logo centralizada. Escopado só à página de
+           verificação via `.stApp:has(.st-key-pagina-publica)` — nunca
+           afeta login/dashboard/admin.
+
+           A técnica "full bleed" (position:relative + left:50% +
+           margin-left:-50vw + width:100vw) é necessária porque
+           `st.set_page_config(layout="centered")` limita o container do
+           Streamlit a uma coluna central de largura máxima — sem isso, o
+           cabeçalho ficaria do tamanho da coluna de conteúdo, não da
+           largura inteira da página (era essa a causa de ele parecer
+           "pequeno e deslocado"). Também removemos a barra nativa do
+           Streamlit (`stHeader`, o botão "Deploy") e o padding-top padrão
+           do container só nesta página, para o cabeçalho branco ficar
+           colado no topo de verdade, sem gap acima dele. */
+        .stApp:has(.st-key-pagina-publica) [data-testid="stHeader"] {{
+            display: none !important;
+        }}
+        .stApp:has(.st-key-pagina-publica) [data-testid="stMainBlockContainer"],
+        .stApp:has(.st-key-pagina-publica) [data-testid="stAppViewBlockContainer"] {{
+            padding-top: 0 !important;
+        }}
         .amorsaude-cabecalho-publico {{
-            display: flex; justify-content: flex-start; align-items: center;
-            background-color: var(--pub-cartao);
-            padding: 1rem 1.5rem;
+            position: relative;
+            left: 50%;
+            right: 50%;
+            margin-left: -50vw;
+            margin-right: -50vw;
+            /* O Streamlit aplica ~48px de gap flex entre blocos de nível
+               superior antes deste elemento (não é padding — não some só
+               zerando o padding-top do container); cancelamos com uma
+               margem negativa para o cabeçalho ficar realmente colado no
+               topo, como pedido. */
+            margin-top: -48px;
+            width: 100vw;
+            display: flex; justify-content: center; align-items: center;
+            background-color: #FFFFFF;
+            padding: 16px 1.5rem;
             margin-bottom: 1.25rem;
-            border-bottom: 1px solid var(--pub-borda);
+            border-bottom: 1px solid #E0E0E0;
         }}
         .amorsaude-cabecalho-publico a {{
             display: inline-flex; line-height: 0; border-radius: 8px;
@@ -536,6 +569,13 @@ def _injetar_estilo() -> None:
         .amorsaude-cabecalho-publico a:active {{ transform: translateY(0); }}
         .amorsaude-cabecalho-publico a:focus-visible {{
             outline: 2px solid var(--pub-primaria); outline-offset: 4px;
+        }}
+        .amorsaude-cabecalho-publico img {{
+            max-height: 48px !important;
+            height: 48px !important;
+            width: auto !important;
+            object-fit: contain !important;
+            display: block !important;
         }}
 
         /* ─────────────────────────────────────────────
@@ -577,11 +617,7 @@ def _injetar_estilo() -> None:
                 padding: 0.25rem 0.5rem !important;
             }}
             .amorsaude-cabecalho-publico {{
-                padding: 0.75rem 1rem !important;
-                margin-bottom: 1rem !important;
-            }}
-            .amorsaude-cabecalho-publico img {{
-                height: 28px !important;
+                padding: 16px 1rem !important;
             }}
 
             /* Selo de verificação: mais compacto */
@@ -726,10 +762,12 @@ def _barra_cabecalho(conteudo_direita: str = "") -> None:
 def _cabecalho_verificacao() -> None:
     """
     Cabeçalho da página pública de verificação, no estilo do site oficial
-    (amorsaude.com.br): fundo branco (`var(--pub-cartao)`, ao contrário do
-    fundo verde-água claro do restante da página), logo alinhada à esquerda,
-    com uma linha fina de separação abaixo. A faixa de status (selo
-    "Atestado Autêntico"/etc.) continua separada, mais abaixo.
+    (amorsaude.com.br): faixa branca (#FFFFFF, sempre — não varia com o
+    tema claro/escuro) de largura total da página, com só a logo,
+    centralizada, altura fixa de 48px (forçada via CSS — ver
+    `.amorsaude-cabecalho-publico img` em `_injetar_estilo()`), e uma linha
+    fina de separação abaixo. A faixa de status (selo "Atestado
+    Autêntico"/etc.) continua separada, mais abaixo, sem mudança.
 
     A logo é um link clicável para o site oficial da AmorSaúde, aberto em nova aba.
     """
@@ -737,7 +775,7 @@ def _cabecalho_verificacao() -> None:
         '<div class="amorsaude-cabecalho-publico">'
         '<a href="https://www.amorsaude.com.br" target="_blank" rel="noopener noreferrer" '
         'aria-label="Site oficial da AmorSaúde (abre em nova aba)">'
-        f'{_logo_html(36)}'
+        f'{_logo_html(48)}'
         '</a>'
         '</div>'
     )
