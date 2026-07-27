@@ -130,8 +130,16 @@ veredito de "fraude confirmada".
   tomada na emissão** (checkbox acima) — quem consulta a página pública não
   tem mais nenhum controle sobre isso (não existe toggle/botão na página
   pública; essa é uma mudança de decisão em relação à versão anterior, que
-  deixava a critério de quem consultava). Cabeçalho compacto (logo pequena,
-  pouco espaço vertical). Inclui metadados de verificação e sinais de confiança.
+  deixava a critério de quem consultava). A censura do CPF é aplicada em
+  `_preparar_dados_verificacao_publica()` (o dict que chega na renderização
+  já vem com o valor mascarado — nunca o CPF completo escondido só por
+  CSS). Cabeçalho no estilo do site oficial (amorsaude.com.br): fundo
+  branco, logo à esquerda, linha fina de separação — diferente do fundo
+  verde-água claro do restante da página. Título da aba do navegador só
+  nesta tela ("AmorSaúde — Validador de Atestados"), via
+  `_definir_titulo_aba_publica()`/`components.html()` (`st.set_page_config()`
+  é global ao processo, não dá para variar por tela). Inclui metadados de
+  verificação e sinais de confiança.
 - **Revogação:** o médico revoga; a verificação passa a mostrar "revogado/inválido".
 - **API REST:** registra atestado programaticamente, autenticada por **token por
   médico** (gerado/revogado pelo admin no painel — ver seção 3); retorna código

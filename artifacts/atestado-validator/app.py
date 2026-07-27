@@ -522,9 +522,10 @@ def _injetar_estilo() -> None:
         /* Cabeçalho da página pública — sóbrio, sem "cartão flutuante":
            logo centralizada sobre o fundo da própria página. */
         .amorsaude-cabecalho-publico {{
-            display: flex; justify-content: center; align-items: center;
-            padding: 0.875rem 1rem 0.75rem 1rem;
-            margin-bottom: 1rem;
+            display: flex; justify-content: flex-start; align-items: center;
+            background-color: var(--pub-cartao);
+            padding: 1rem 1.5rem;
+            margin-bottom: 1.25rem;
             border-bottom: 1px solid var(--pub-borda);
         }}
         .amorsaude-cabecalho-publico a {{
@@ -576,8 +577,8 @@ def _injetar_estilo() -> None:
                 padding: 0.25rem 0.5rem !important;
             }}
             .amorsaude-cabecalho-publico {{
-                padding: 0.75rem 1rem 0.625rem 1rem !important;
-                margin-bottom: 0.875rem !important;
+                padding: 0.75rem 1rem !important;
+                margin-bottom: 1rem !important;
             }}
             .amorsaude-cabecalho-publico img {{
                 height: 28px !important;
@@ -724,10 +725,11 @@ def _barra_cabecalho(conteudo_direita: str = "") -> None:
 
 def _cabecalho_verificacao() -> None:
     """
-    Cabeçalho sóbrio e limpo da página pública de verificação: logo centralizada,
-    sem a "placa branca"/cartão flutuante do cabeçalho interno — aqui a logo fica
-    direto sobre o fundo da própria página (funciona porque o arquivo da logo não
-    tem nenhuma cor idêntica ao fundo, ao contrário do cabeçalho teal interno).
+    Cabeçalho da página pública de verificação, no estilo do site oficial
+    (amorsaude.com.br): fundo branco (`var(--pub-cartao)`, ao contrário do
+    fundo verde-água claro do restante da página), logo alinhada à esquerda,
+    com uma linha fina de separação abaixo. A faixa de status (selo
+    "Atestado Autêntico"/etc.) continua separada, mais abaixo.
 
     A logo é um link clicável para o site oficial da AmorSaúde, aberto em nova aba.
     """
@@ -735,7 +737,7 @@ def _cabecalho_verificacao() -> None:
         '<div class="amorsaude-cabecalho-publico">'
         '<a href="https://www.amorsaude.com.br" target="_blank" rel="noopener noreferrer" '
         'aria-label="Site oficial da AmorSaúde (abre em nova aba)">'
-        f'{_logo_html(30)}'
+        f'{_logo_html(36)}'
         '</a>'
         '</div>'
     )
@@ -908,6 +910,21 @@ def _mascarar_cpf(cpf: str) -> str:
     return f"***.{digitos[3:6]}.{digitos[6:9]}-**"
 
 
+def _preparar_dados_verificacao_publica(atestado: dict) -> dict:
+    """
+    Prepara uma cópia do atestado pronta para a página pública: aplica a
+    censura do CPF (se houver) ANTES de qualquer renderização, para que o
+    valor que chega no HTML já seja o mascarado — nunca o CPF completo,
+    escondido só por CSS. Se não houver CPF cadastrado (hoje é sempre o
+    caso — ver `_mascarar_cpf`), a chave 'cpf' fica ausente do dict.
+    """
+    dados = dict(atestado)
+    cpf_bruto = dados.pop("cpf", None)
+    if cpf_bruto:
+        dados["cpf"] = _mascarar_cpf(cpf_bruto)
+    return dados
+
+
 def _campo_dado_publico(rotulo: str, valor: str) -> None:
     """
     Igual a `_campo_dado`, mas usando as variáveis CSS de tema claro/escuro da
@@ -978,7 +995,7 @@ def _bloco_como_funciona() -> None:
                         font-size:0.875rem; color:var(--pub-primaria); margin-bottom:0.25rem;">
                 {ico_info} Como funciona esta verificação
             </div>
-            {_item(ico_zap,     "Verificação em tempo real diretamente na base de dados AmorSaúde — não é um PDF e não pode ser falsificado.")}
+            {_item(ico_zap,     "A verificação é feita em tempo real, direto na base de dados da AmorSaúde, por isso não é um PDF e não pode ser falsificado.")}
             {_item(ico_shield,  "O resultado exibido é o mesmo a cada leitura do QR Code ou do link, garantindo autenticidade integral.")}
             {_item(ico_eye_off, "Nenhum dado de quem realiza esta consulta é coletado, registrado ou armazenado.")}
         </div>
@@ -1557,12 +1574,31 @@ def _secao_documento_pdf_concluido(
 # TELA 1 — Verificação pública (?codigo=XXX)
 # ---------------------------------------------------------------------------
 
+def _definir_titulo_aba_publica() -> None:
+    """
+    Define o título da aba do navegador para a página pública de
+    verificação. `st.set_page_config()` é global (mesmo processo/script
+    para login, dashboard e admin), então não dá para diferenciar o título
+    por lá — em vez disso, `components.html()` renderiza um <iframe>
+    sandboxed que, com `allow-same-origin` (padrão do Streamlit), consegue
+    alcançar o documento pai só para ajustar `document.title`, sem navegar
+    nem alterar mais nada na página.
+    """
+    components.html(
+        '<script>parent.document.title = "AmorSaúde — Validador de Atestados";</script>',
+        height=0,
+    )
+
+
 def tela_verificacao(codigo: str) -> None:
     with st.container(key="pagina-publica"):
+        _definir_titulo_aba_publica()
         _cabecalho_verificacao()
 
         with st.spinner("Consultando banco de dados…"):
             atestado = buscar_atestado_por_codigo(codigo)
+            if atestado is not None:
+                atestado = _preparar_dados_verificacao_publica(atestado)
 
         col_esq, col_centro, col_dir = st.columns([1, 6, 1])
         with col_centro:
@@ -1638,7 +1674,7 @@ def tela_verificacao(codigo: str) -> None:
                             _campo_dado_publico("Paciente", atestado["nome_paciente"])
                             cpf_atestado = atestado.get("cpf")
                             if cpf_atestado:
-                                _campo_dado_publico("CPF", _mascarar_cpf(cpf_atestado))
+                                _campo_dado_publico("CPF", cpf_atestado)
                             _campo_dado_publico("Emissão", _linha_emissao_dias(atestado))
                             _campo_cid_publico(atestado["cid"], bool(atestado.get("exibir_cid")))
                             _campo_dado_publico("Médico", atestado["nome_medico"])
