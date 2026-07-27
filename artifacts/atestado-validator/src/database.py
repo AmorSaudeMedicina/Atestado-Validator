@@ -56,6 +56,12 @@ _MIGRACOES_COLUNAS = [
     # como texto puro por engano: buscar_atestado_por_codigo() e
     # listar_atestados_por_crm() só descriptografam quando cifrado=1.
     ("cifrado", "INTEGER NOT NULL DEFAULT 0"),
+    # Decisão do médico, tomada na emissão (não de quem consulta depois): se
+    # o CID aparece em texto normal na página pública de verificação (1) ou
+    # fica oculto atrás de "Protegido por sigilo médico" (0, padrão — mesmo
+    # comportamento de sempre para atestados emitidos antes desta coluna
+    # existir). Ver tela_verificacao() em app.py.
+    ("exibir_cid", "INTEGER NOT NULL DEFAULT 0"),
 ]
 
 _CREATE_USUARIOS = """
@@ -691,22 +697,27 @@ def salvar_atestado(
     data_inicio: Optional[str],
     data_fim: Optional[str],
     dias_afastamento: Optional[int],
+    exibir_cid: bool = False,
 ) -> None:
     """
     Persiste um novo atestado no banco. `nome_paciente` e `cid` são gravados
     criptografados (ver src/crypto.py) — nunca em texto puro.
+
+    `exibir_cid` é a decisão do médico, tomada agora na emissão, sobre se o
+    CID aparece em texto normal na página pública de verificação (True) ou
+    fica oculto atrás de "Protegido por sigilo médico" (False, padrão).
     """
     sql = """
         INSERT INTO atestados
             (codigo, nome_medico, crm, nome_paciente, cid,
-             data_emissao, data_inicio, data_fim, dias_afastamento, cifrado)
-        VALUES (?,?,?,?,?,?,?,?,?,1)
+             data_emissao, data_inicio, data_fim, dias_afastamento, cifrado, exibir_cid)
+        VALUES (?,?,?,?,?,?,?,?,?,1,?)
     """
     with _conectar() as conn:
         conn.execute(
             sql,
             (codigo, nome_medico, crm, criptografar(nome_paciente), criptografar(cid),
-             data_emissao, data_inicio, data_fim, dias_afastamento),
+             data_emissao, data_inicio, data_fim, dias_afastamento, int(exibir_cid)),
         )
         conn.commit()
 

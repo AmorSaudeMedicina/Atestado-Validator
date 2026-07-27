@@ -87,6 +87,10 @@ def registrar_atestado_core(medico: dict, corpo: dict, origem: str, request: Req
     preenchido, dispara em segundo plano a geração do PDF (ver
     src/documento_pdf.py), que usa o CPF só para preencher o documento.
 
+    `corpo["exibir_cid"]` é OPCIONAL (padrão False) — decide se o CID
+    aparece em texto normal na página pública de verificação ou fica oculto
+    atrás de "Protegido por sigilo médico" (ver seção 6 do CLAUDE.md).
+
     Levanta ErroValidacaoAtestado (mensagem em português) se os dados forem
     inválidos. Não grava nada no banco nesse caso.
     """
@@ -97,8 +101,9 @@ def registrar_atestado_core(medico: dict, corpo: dict, origem: str, request: Req
     cid = str(corpo.get("cid") or "").strip()
     # CPF é OPCIONAL e nunca é salvo no registro do atestado (decisão de
     # LGPD já documentada) — só existe, se informado, para preencher o
-    # campo correspondente do PDF gerado via Canva (ver disparo abaixo).
+    # campo correspondente do PDF gerado localmente (ver disparo abaixo).
     cpf = str(corpo.get("cpf") or "").strip() or None
+    exibir_cid = bool(corpo.get("exibir_cid"))
     data_emissao_bruta = corpo.get("data_emissao")
     dias_afastamento_bruto = corpo.get("dias_afastamento")
     data_inicio_bruta = corpo.get("data_inicio")
@@ -170,6 +175,7 @@ def registrar_atestado_core(medico: dict, corpo: dict, origem: str, request: Req
         data_inicio=data_inicio_str,
         data_fim=data_fim_str,
         dias_afastamento=dias_afastamento,
+        exibir_cid=exibir_cid,
     )
     registrar_evento(
         EVENTO_ATESTADO_EMITIDO,
@@ -213,6 +219,7 @@ def registrar_atestado_core(medico: dict, corpo: dict, origem: str, request: Req
         "data_inicio": data_inicio_str,
         "data_fim": data_fim_str,
         "dias_afastamento": dias_afastamento,
+        "exibir_cid": exibir_cid,
     }
 
 
@@ -228,8 +235,11 @@ async def registrar_atestado(request: Request) -> Response:
         data_emissao (str "AAAA-MM-DD", obrigatório)
         dias_afastamento (int) — OU — data_inicio + data_fim (str "AAAA-MM-DD")
         cpf (str, opcional) — nunca é salvo; se informado, dispara a geração
-            automática do PDF do atestado via Canva em segundo plano
-            (disponível depois para download no dashboard do médico)
+            automática do PDF do atestado em segundo plano (disponível
+            depois para download no dashboard do médico)
+        exibir_cid (bool, opcional, padrão false) — se o CID aparece em
+            texto normal na página pública de verificação, ou fica oculto
+            atrás de "Protegido por sigilo médico"
 
     Resposta 201 JSON:
         codigo, url_verificacao, qr_code_url, nome_medico, crm

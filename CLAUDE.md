@@ -84,9 +84,11 @@ veredito de "fraude confirmada".
 - **Dashboard do médico:** cartões de visão geral, gráfico de atestados emitidos
   por mês (sempre os **últimos 6 meses**, mesmo com meses zerados — evita o
   visual de "barra isolada" com poucos dados), formulário de emissão e lista de
-  atestados emitidos. **Não tem** gestão de token de API/integrações (isso ficou
-  só no painel do admin, ver acima) — um médico que precise do token pede ao
-  administrador.
+  atestados emitidos — cada item da lista mostra discretamente (ícone + texto
+  pequeno) se o CID está "Visível na verificação" ou "Oculto na verificação"
+  para aquele atestado (ver checkbox de emissão e seção 6). **Não tem** gestão
+  de token de API/integrações (isso ficou só no painel do admin, ver acima) —
+  um médico que precise do token pede ao administrador.
 - **Segurança/LGPD — Parte 1 (acesso/login), concluída:** nenhuma credencial aparece
   na tela, exigência de senha forte, bloqueio de conta por tentativas de login
   incorretas, expiração de sessão, e troca de senha obrigatória no primeiro login do admin.
@@ -112,19 +114,24 @@ veredito de "fraude confirmada".
   - Implementação: `src/retencao.py` (regras de negócio, nunca derruba a
     aplicação) + funções novas em `src/database.py` + eventos novos em
     `src/audit.py`.
-- **Emissão por formulário:** paciente, CID, data de emissão, período/dias. Médico vem da sessão.
+- **Emissão por formulário:** paciente, CID, data de emissão, período/dias, e o
+  checkbox **"Exibir diagnóstico (CID) na verificação pública"** (desmarcado
+  por padrão — ver seção 6). Médico vem da sessão. O mesmo campo
+  (`exibir_cid`, opcional, padrão `false`) é aceito pela API REST e pelo
+  conector MCP — quem integra por esses caminhos também decide na hora de
+  registrar, não é algo que se muda depois.
 - **Geração de QR:** código aleatório único; URL de verificação; imagem PNG pública em
   `/atestados/{codigo}/qrcode.png` (com CORS, sem login, cacheável).
 - **Página pública de verificação** (`/?codigo=...`): mostra estado **Autêntico /
   Revogado / Não encontrado**, com "Dados validados" nesta ordem: paciente, CPF
   censurado (só se houver — hoje nunca há, CPF nunca é persistido, ver seção 6),
   data de emissão + dias numa linha (ex.: "26/07/2026 · 1 dia(s)"), CID
-  (diagnóstico) e médico/CRM. **O CID fica oculto por padrão** atrás de um
-  toggle ("Mostrar diagnóstico"/"Ocultar") — quem consulta decide revelar ou
-  não nesta própria visualização; o estado do toggle não é persistido em
-  lugar nenhum (recomeça oculto a cada nova consulta). Cabeçalho compacto
-  (logo pequena, pouco espaço vertical). Inclui metadados de verificação e
-  sinais de confiança.
+  (diagnóstico) e médico/CRM. **Se o CID aparece ou não é decisão do médico,
+  tomada na emissão** (checkbox acima) — quem consulta a página pública não
+  tem mais nenhum controle sobre isso (não existe toggle/botão na página
+  pública; essa é uma mudança de decisão em relação à versão anterior, que
+  deixava a critério de quem consultava). Cabeçalho compacto (logo pequena,
+  pouco espaço vertical). Inclui metadados de verificação e sinais de confiança.
 - **Revogação:** o médico revoga; a verificação passa a mostrar "revogado/inválido".
 - **API REST:** registra atestado programaticamente, autenticada por **token por
   médico** (gerado/revogado pelo admin no painel — ver seção 3); retorna código
@@ -266,17 +273,31 @@ Numa conversa da Claude com os conectores **"AmorSaude Validação" (MCP)** + **
 
 ## 6. Decisões e restrições importantes
 - Ferramenta de **apoio**, nunca "fraude confirmada".
-- **LGPD:** CID (diagnóstico) fica **oculto por padrão** na página pública, atrás de
-  um toggle que quem consulta aciona por conta própria ("Mostrar diagnóstico" —
-  ver seção 3); deixou de ser "nunca exibido" para "revelável sob demanda", decisão
-  explícita do dono do produto. CPF não vai para a verificação nem para
-  o registro do atestado em NENHUM fluxo (formulário, API, MCP) — só existe,
-  quando informado, para preencher o PDF gerado localmente (seção 5), nunca é
-  persistido em lugar nenhum (nem para permitir "tentar novamente" — o dashboard
-  pede o CPF de novo nesse caso). Frente de **Segurança/LGPD CONCLUÍDA** (Partes
-  1-4): Parte 1 (acesso/login), Parte 2 (criptografia em repouso), Parte 3
-  (auditoria) e Parte 4 (retenção/exclusão de atestados) — ver seção 3. Não há
-  parte pendente nesta frente.
+- **LGPD — CID (diagnóstico):** decisão de exibir ou não o CID na página pública
+  é do **médico, tomada na emissão** (checkbox "Exibir diagnóstico (CID) na
+  verificação pública", desmarcado por padrão — ver seção 3), gravada no
+  atestado (`exibir_cid`, coluna nova em `atestados`). Quem consulta a página
+  pública **não** tem mais controle sobre isso — não existe toggle nem botão de
+  revelar na página pública; se o médico não marcou, o CID fica sempre atrás
+  de "Protegido por sigilo médico" para todo mundo que consultar aquele
+  atestado, sem exceção. Isso substitui uma versão anterior, breve, em que a
+  página pública tinha um toggle "Mostrar diagnóstico" acionado por quem
+  consultava — o dono do produto decidiu que essa escolha deve ser do médico,
+  não de quem verifica.
+- **LGPD — CPF:** não vai para o registro do atestado em NENHUM fluxo
+  (formulário, API, MCP) — só existe, quando informado, para preencher o PDF
+  gerado localmente (seção 5), nunca é persistido em lugar nenhum (nem para
+  permitir "tentar novamente" — o dashboard pede o CPF de novo nesse caso).
+  A página pública TEM um campo de CPF censurado (formato `***.818.456-**` —
+  esconde os 3 primeiros dígitos e os 2 verificadores finais, mostra os 6 do
+  meio como referência de conferência), mas como o CPF nunca é persistido,
+  esse campo nunca aparece na prática hoje — só existe pronto para o dia em
+  que `atestado` eventualmente carregar um `cpf` (ver `_mascarar_cpf()` em
+  `app.py`).
+- Frente de **Segurança/LGPD CONCLUÍDA** (Partes 1-4): Parte 1 (acesso/login),
+  Parte 2 (criptografia em repouso), Parte 3 (auditoria) e Parte 4
+  (retenção/exclusão de atestados) — ver seção 3. Não há parte pendente nesta
+  frente.
 - O PDF gerado é cifrado em repouso (mesma `ENCRYPTION_KEY`) e é apagado junto
   quando o atestado é anonimizado/excluído (Parte 4) — ver seção 5.1.
 - Código do QR deve ser **aleatório e imprevisível** (evitar enumeração/vazamento).

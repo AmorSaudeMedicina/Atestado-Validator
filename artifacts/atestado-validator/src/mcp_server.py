@@ -85,8 +85,16 @@ _FERRAMENTA_REGISTRAR_ATESTADO = {
                 "type": "string",
                 "description": (
                     "CPF do paciente (opcional). NUNCA é salvo no registro do atestado — usado "
-                    "só para preencher automaticamente o PDF do atestado gerado via Canva em "
-                    "segundo plano. Sem este campo, nenhum PDF é gerado."
+                    "só para preencher automaticamente o PDF do atestado, gerado em segundo "
+                    "plano. Sem este campo, nenhum PDF é gerado."
+                ),
+            },
+            "exibir_cid": {
+                "type": "boolean",
+                "description": (
+                    "Se o CID (diagnóstico) aparece em texto normal na página pública de "
+                    "verificação, ou fica oculto atrás de 'Protegido por sigilo médico' "
+                    "(padrão: false, oculto)."
                 ),
             },
         },

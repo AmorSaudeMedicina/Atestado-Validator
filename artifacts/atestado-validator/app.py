@@ -893,17 +893,19 @@ def _campo_cid_protegido() -> None:
 
 def _mascarar_cpf(cpf: str) -> str:
     """
-    Mascara um CPF no formato 123.***.***-22 (mostra só os 3 primeiros e os
-    2 últimos dígitos). Hoje o CPF nunca é persistido no registro do
-    atestado (decisão de LGPD já documentada — só existe, quando informado
-    na emissão, para preencher o PDF via `src/documento_pdf.py`), então esta
-    função nunca é chamada na prática; existe para o dia em que `atestado`
-    eventualmente carregar um `cpf` sem precisar mudar o call site.
+    Mascara um CPF no formato ***.818.456-** (oculta os 3 primeiros dígitos
+    e os 2 dígitos verificadores finais, mostra os 6 do meio como
+    referência de conferência). Hoje o CPF nunca é persistido no registro
+    do atestado (decisão de LGPD já documentada — só existe, quando
+    informado na emissão, para preencher o PDF via
+    `src/documento_pdf.py`), então esta função nunca é chamada na prática;
+    existe para o dia em que `atestado` eventualmente carregar um `cpf` sem
+    precisar mudar o call site.
     """
     digitos = "".join(c for c in cpf if c.isdigit())
     if len(digitos) != 11:
         return cpf
-    return f"{digitos[0:3]}.***.***-{digitos[9:11]}"
+    return f"***.{digitos[3:6]}.{digitos[6:9]}-**"
 
 
 def _campo_dado_publico(rotulo: str, valor: str) -> None:
@@ -926,46 +928,32 @@ def _campo_dado_publico(rotulo: str, valor: str) -> None:
     )
 
 
-def _campo_cid_toggle_publico(cid: str, codigo: str) -> None:
+def _campo_cid_publico(cid: str, exibir: bool) -> None:
     """
-    Campo do CID na página pública: oculto por padrão (ícone de cadeado +
-    "Protegido por sigilo médico"), com um botão para quem está consultando
-    revelar o diagnóstico nesta própria visualização ("Mostrar
-    diagnóstico"/"Ocultar"). O estado do toggle fica só em `st.session_state`
-    (não é persistido em lugar nenhum) e começa sempre oculto a cada nova
-    consulta/recarregamento.
+    Campo do CID na página pública: mostra o código normalmente se o médico
+    marcou "Exibir diagnóstico (CID) na verificação pública" ao emitir o
+    atestado (`exibir_cid=1`), ou o aviso de sigilo médico caso contrário
+    (padrão). Decisão fixada pelo médico na emissão — quem consulta não tem
+    mais como alternar isso na própria página (ver checkbox no formulário
+    de emissão, em tela_dashboard()).
     """
-    chave_mostrar = f"pub_cid_visivel_{codigo}"
-    mostrar = st.session_state.get(chave_mostrar, False)
-    with st.container(key=f"pub-cid-{codigo}"):
-        st.markdown(
-            f'<div style="color:var(--pub-texto); opacity:0.6; font-size:0.75rem; font-weight:600; '
-            f'letter-spacing:0.04em; text-transform:uppercase; margin-bottom:0.25rem; '
-            f'font-family:\'Nunito Sans\',sans-serif;">Diagnóstico (CID)</div>',
-            unsafe_allow_html=True,
-        )
-        if mostrar:
-            icone = _svg("unlock", 14, "var(--pub-texto)", "opacity:0.5; margin-right:0.375rem; flex-shrink:0")
-            st.markdown(
-                f'<div style="color:var(--pub-texto); font-size:1.1875rem; font-weight:700; '
-                f'display:flex; align-items:center; margin-bottom:0.5rem; '
-                f'font-family:\'Nunito Sans\',sans-serif;">{icone}<span>{html.escape(cid)}</span></div>',
-                unsafe_allow_html=True,
-            )
-            if st.button("Ocultar", key=f"pub_cid_ocultar_{codigo}", type="secondary"):
-                st.session_state[chave_mostrar] = False
-                st.rerun()
-        else:
-            icone = _svg("lock", 14, "var(--pub-texto)", "opacity:0.45; margin-right:0.375rem; flex-shrink:0")
-            st.markdown(
-                f'<div style="color:var(--pub-texto); font-size:0.9375rem; font-weight:600; '
-                f'display:flex; align-items:center; opacity:0.65; margin-bottom:0.5rem; '
-                f'font-family:\'Nunito Sans\',sans-serif;">{icone}<span>Protegido por sigilo médico</span></div>',
-                unsafe_allow_html=True,
-            )
-            if st.button("Mostrar diagnóstico", key=f"pub_cid_mostrar_{codigo}", type="secondary"):
-                st.session_state[chave_mostrar] = True
-                st.rerun()
+    if exibir:
+        _campo_dado_publico("Diagnóstico (CID)", cid)
+        return
+    icone = _svg("lock", 14, "var(--pub-texto)", "opacity:0.45; margin-right:0.375rem; flex-shrink:0")
+    st.markdown(
+        f"""
+        <div style="margin-bottom:1.25rem; font-family:'Nunito Sans',sans-serif;">
+            <div style="color:var(--pub-texto); opacity:0.6; font-size:0.75rem; font-weight:600;
+                        letter-spacing:0.04em; text-transform:uppercase; margin-bottom:0.25rem;">Diagnóstico (CID)</div>
+            <div style="color:var(--pub-texto); font-size:0.9375rem; font-weight:600;
+                        display:flex; align-items:center; opacity:0.65;">
+                {icone}<span>Protegido por sigilo médico</span>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 def _bloco_como_funciona() -> None:
@@ -1652,7 +1640,7 @@ def tela_verificacao(codigo: str) -> None:
                             if cpf_atestado:
                                 _campo_dado_publico("CPF", _mascarar_cpf(cpf_atestado))
                             _campo_dado_publico("Emissão", _linha_emissao_dias(atestado))
-                            _campo_cid_toggle_publico(atestado["cid"], codigo)
+                            _campo_cid_publico(atestado["cid"], bool(atestado.get("exibir_cid")))
                             _campo_dado_publico("Médico", atestado["nome_medico"])
                             _campo_dado_publico("CRM", atestado["crm"])
 
@@ -2553,14 +2541,23 @@ def tela_dashboard() -> None:
             placeholder="ex.: 000.000.000-00",
             help=(
                 "Nunca é salvo no registro do atestado. Se preenchido, gera automaticamente "
-                "o PDF do atestado (documento com QR Code) via Canva, disponível para baixar "
-                "aqui embaixo assim que terminar de processar."
+                "o PDF do atestado (documento com QR Code), disponível para baixar aqui "
+                "embaixo assim que terminar de processar."
             ),
         )
         cid = st.text_input(
             "CID-10 *",
             placeholder="ex.: J18.9",
             help="Código Internacional de Doenças. Usado apenas para fins de teste neste protótipo.",
+        )
+        exibir_cid_publico = st.checkbox(
+            "Exibir diagnóstico (CID) na verificação pública",
+            value=False,
+            help=(
+                "Por padrão, o CID fica oculto na página pública de verificação (mostra "
+                "\"Protegido por sigilo médico\"). Marque esta opção para que o código CID "
+                "apareça normalmente para quem consultar o QR Code ou o link."
+            ),
         )
 
         col_emissao, col_modo = st.columns(2)
@@ -2641,6 +2638,7 @@ def tela_dashboard() -> None:
                     data_inicio=str(data_inicio_val) if data_inicio_val else None,
                     data_fim=str(data_fim_val) if data_fim_val else None,
                     dias_afastamento=int(dias) if dias else None,
+                    exibir_cid=exibir_cid_publico,
                 )
                 registrar_evento(
                     EVENTO_ATESTADO_EMITIDO,
@@ -2794,6 +2792,21 @@ def tela_dashboard() -> None:
 
                 col_1, col_2, col_3, col_4 = st.columns(4)
                 col_1.markdown(f"**CID**  \n{a['cid'] or '—'}")
+                if status_atestado != "anonimizado":
+                    if a.get("exibir_cid"):
+                        icone_cid_vis = _svg("unlock", 11, COR_PRIMARIA, "margin-right:0.25rem; vertical-align:middle")
+                        col_1.markdown(
+                            f'<div style="font-size:0.7rem; color:{COR_PRIMARIA}; opacity:0.85; margin-top:-0.5rem;">'
+                            f'{icone_cid_vis}Visível na verificação</div>',
+                            unsafe_allow_html=True,
+                        )
+                    else:
+                        icone_cid_vis = _svg("lock", 11, COR_NEUTRA, "margin-right:0.25rem; vertical-align:middle")
+                        col_1.markdown(
+                            f'<div style="font-size:0.7rem; color:{COR_NEUTRA}; opacity:0.85; margin-top:-0.5rem;">'
+                            f'{icone_cid_vis}Oculto na verificação</div>',
+                            unsafe_allow_html=True,
+                        )
                 col_2.markdown(f"**Emissão**  \n{a['data_emissao']}")
                 col_3.markdown(f"**Período**  \n{_formatar_periodo(a)}")
                 col_4.markdown(f"**Código**  \n`{codigo_atestado[:8]}…`")
