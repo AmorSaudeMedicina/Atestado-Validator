@@ -1365,7 +1365,7 @@ def _secao_api_integracoes() -> None:
             f"""
 Além do formulário acima, é possível registrar atestados **automaticamente**, de um
 sistema externo (por exemplo, uma automação que preenche uma "ficha padrão" e
-gera um documento no Canva). Isso é feito chamando um endereço da API com o
+gera um documento a partir dela). Isso é feito chamando um endereço da API com o
 **token de API do médico** (gere um na seção "Token de API" acima).
 
 **1. Endereço para registrar um atestado**
@@ -1394,7 +1394,7 @@ Exemplo de corpo da requisição:
 
 **3. O que a API devolve**, se o token for válido: o código único do atestado,
 o link público de verificação e o link público da imagem do QR Code (pronto
-para ser baixado por outro sistema, como o Canva):
+para ser baixado por outro sistema):
 ```json
 {{
   "codigo": "abc123...",

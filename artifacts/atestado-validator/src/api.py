@@ -267,7 +267,7 @@ async def registrar_atestado(request: Request) -> Response:
 
 
 _HEADERS_QR = {
-    # Permite que qualquer servidor externo (Canva, Make, Zapier, etc.) busque
+    # Permite que qualquer servidor externo (Make, Zapier, etc.) busque
     # a imagem diretamente, inclusive via fetch de browser (sem bloqueio CORS).
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "GET, OPTIONS",
@@ -286,8 +286,8 @@ async def obter_qr_code(request: Request) -> Response:
     Endpoint público (sem autenticação) — mesmo nível de acesso da página de
     verificação pública já existente (?codigo=...): o `codigo` em si é o
     segredo (32 bytes aleatórios, improvável de adivinhar), não o token do
-    médico. Isso é o que permite que ferramentas externas (ex.: Canva) baixem
-    a imagem do QR Code diretamente por URL, sem login nem JavaScript.
+    médico. Isso é o que permite que ferramentas externas baixem a imagem do
+    QR Code diretamente por URL, sem login nem JavaScript.
     """
     # Responde ao preflight CORS enviado por browsers/ferramentas antes do GET.
     # Responde ao preflight CORS enviado por browsers/ferramentas antes do GET.

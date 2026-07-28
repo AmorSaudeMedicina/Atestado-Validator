@@ -119,8 +119,7 @@ raiz do repositório — ver `railway.toml` e a seção "Deploy no Railway" no
 `CLAUDE.md`/mensagem do assistente para o caminho do volume persistente do
 banco SQLite (`DATA_DIR`).
 
-Geração automática do PDF do atestado via Canva: exige uma autorização única
-de um administrador em `/admin/canva/conectar` (link no painel do admin) e as
-variáveis `CANVA_CLIENT_ID`/`CANVA_CLIENT_SECRET` — passo a passo completo,
-incluindo o aviso de **reautorizar ao trocar de conta do Canva**, na seção 5
-do `CLAUDE.md`.
+Geração automática do PDF do atestado: gerada localmente no servidor com
+weasyprint (`src/documento_pdf.py`), sem depender de nenhum serviço externo.
+Exige as bibliotecas nativas do Pango/GObject/fontconfig (já instaladas pelo
+`Dockerfile`) — passo a passo completo na seção 5 do `CLAUDE.md`.

@@ -48,10 +48,7 @@ EVENTO_SENHA_TROCADA_PROPRIA = "senha_trocada_propria"
 # Retenção/exclusão de dados (LGPD/segurança, parte 4) — ver src/retencao.py.
 EVENTO_ATESTADO_ANONIMIZADO = "atestado_anonimizado"
 EVENTO_ATESTADO_EXCLUIDO = "atestado_excluido"
-# Geração do documento PDF (ver src/documento_pdf.py). EVENTO_CANVA_CONECTADO
-# é só do fluxo manual/legado (admin autoriza o servidor no Canva — ver
-# src/canva_admin.py); não é usado pela geração automática do PDF.
-EVENTO_CANVA_CONECTADO = "canva_conectado"
+# Geração do documento PDF (ver src/documento_pdf.py).
 EVENTO_DOCUMENTO_GERADO = "documento_gerado"
 EVENTO_DOCUMENTO_FALHOU = "documento_falhou"
 
@@ -68,7 +65,6 @@ TODOS_OS_TIPOS_DE_EVENTO = [
     EVENTO_SENHA_TROCADA_PROPRIA,
     EVENTO_ATESTADO_ANONIMIZADO,
     EVENTO_ATESTADO_EXCLUIDO,
-    EVENTO_CANVA_CONECTADO,
     EVENTO_DOCUMENTO_GERADO,
     EVENTO_DOCUMENTO_FALHOU,
 ]
@@ -87,7 +83,6 @@ RÓTULOS_TIPOS_DE_EVENTO = {
     EVENTO_SENHA_TROCADA_PROPRIA: "Senha trocada (pela própria conta)",
     EVENTO_ATESTADO_ANONIMIZADO: "Atestado anonimizado",
     EVENTO_ATESTADO_EXCLUIDO: "Atestado excluído definitivamente",
-    EVENTO_CANVA_CONECTADO: "Canva conectado (admin)",
     EVENTO_DOCUMENTO_GERADO: "Documento PDF gerado",
     EVENTO_DOCUMENTO_FALHOU: "Documento PDF falhou",
 }

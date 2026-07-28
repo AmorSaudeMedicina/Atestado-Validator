@@ -92,8 +92,8 @@ def descriptografar(texto_cifrado: Optional[str]) -> Optional[str]:
 def criptografar_bytes(dados: bytes) -> bytes:
     """
     Variante em bytes de `criptografar()` — usada para arquivos binários em
-    repouso (ex.: o PDF do atestado gerado via Canva, que carrega nome e CPF
-    em claro dentro do documento). Mesma chave ENCRYPTION_KEY, mesmo
+    repouso (ex.: o PDF do atestado, que carrega nome e CPF em claro dentro
+    do documento). Mesma chave ENCRYPTION_KEY, mesmo
     fail-closed de `_fernet()`.
     """
     return _fernet().encrypt(dados)

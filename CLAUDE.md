@@ -20,8 +20,7 @@ veredito de "fraude confirmada".
 ### Atores
 - **Médico:** faz login, emite atestados pelo formulário (com PDF gerado
   automaticamente, localmente no servidor, se informar o CPF do paciente — ver
-  seção 5) OU pelo fluxo manual em conversa com a Claude+Canva, e pode revogar
-  atestados que emitiu.
+  seção 5) e pode revogar atestados que emitiu.
 - **Administrador:** gerencia contas de médico (criar, ativar/desativar, redefinir senha).
 - **Empresa/Paciente:** verificam a autenticidade pela página pública (via QR), sem login.
 
@@ -60,15 +59,6 @@ veredito de "fraude confirmada".
   automação só liga com essa variável definida explicitamente. Se definida com um
   número de dias > 0, ANONIMIZA (nunca exclui) os atestados emitidos há mais tempo
   que esse prazo, na subida do processo e a cada 24h.
-- **`CANVA_CLIENT_ID`** / **`CANVA_CLIENT_SECRET`** / **`CANVA_TEMPLATE_DESIGN_ID`** /
-  **`CANVA_CAMPO_NOME`**/**`CANVA_CAMPO_CPF`**/**`CANVA_CAMPO_DATA_INICIO`**/
-  **`CANVA_CAMPO_DIAS`**/**`CANVA_CAMPO_CID`**/**`CANVA_CAMPO_QR`** — **legado,
-  não usadas pela geração automática do PDF desde que ela passou a rodar
-  localmente com weasyprint** (ver seção 5). Continuam existindo só porque
-  `src/canva_client.py`/`src/canva_admin.py` (e a tela `/admin/canva/conectar`)
-  não foram removidos do código — o fluxo manual via chat (seção 5.2) não
-  depende delas, ele usa o conector Canva da própria Claude. Podem ficar
-  ausentes sem problema nenhum.
 
 ## 3. Funcionalidades já implementadas
 - **Login seguro:** perfis **admin** e **médico**, senhas com **hash (bcrypt)**,
@@ -79,7 +69,7 @@ veredito de "fraude confirmada".
   criado a partir de `ADMIN_INITIAL_PASSWORD` (ou senha aleatória forte gerada
   no primeiro boot, ver seção de variáveis de ambiente). O cadastro de médico
   tem também um bloco **opcional** de endereço da clínica (rua/número, cidade, UF,
-  CEP, telefone) — usado só para preencher o rodapé do PDF do atestado (seção 5.1);
+  CEP, telefone) — usado só para preencher o rodapé do PDF do atestado (seção 5);
   sem preencher, o rodapé simplesmente omite as linhas correspondentes.
 - **Dashboard do médico:** cartões de visão geral, gráfico de atestados emitidos
   por mês (sempre os **últimos 6 meses**, mesmo com meses zerados — evita o
@@ -171,8 +161,8 @@ veredito de "fraude confirmada".
   Registration + Authorization Code + PKCE). URL do conector:
   `https://atestado-validator-production.up.railway.app/mcp`. Expõe a ferramenta
   **`registrar_atestado`**. O médico faz login com as credenciais do Portal ao conectar.
-- **Documento PDF automático, gerado localmente** (sem Canva, sem IA no meio —
-  ver seção 5 para o fluxo completo): ao emitir um atestado (formulário, API
+- **Documento PDF automático, gerado localmente** (sem nenhum serviço externo
+  no meio — ver seção 5 para o fluxo completo): ao emitir um atestado (formulário, API
   ou MCP) com o CPF do paciente informado, o servidor monta um HTML/CSS fiel
   ao layout oficial do atestado e renderiza o PDF sozinho, em segundo plano,
   com **weasyprint** — sem depender de nenhum serviço externo. Disponível
@@ -195,7 +185,7 @@ veredito de "fraude confirmada".
   cookie httpOnly a partir do script, o login gera um token de troca de uso
   único e válido por 60s, redireciona para uma rota HTTP dedicada
   (`GET /auth/lembrar-me`, em `src/auth_routes.py`, registrada em `server.py` —
-  mesmo padrão já usado por `/oauth/authorize` e `/admin/canva/conectar`), que
+  mesmo padrão já usado por `/oauth/authorize`), que
   troca esse token pelo cookie de verdade (30 dias, `Secure` quando em HTTPS,
   `SameSite=Lax`) e redireciona de volta já autenticado. O valor do cookie
   nunca é guardado em texto puro no banco — só o hash (mesmo padrão de
@@ -227,16 +217,10 @@ veredito de "fraude confirmada".
 - **Microinterações:** hover e transições suaves.
 - **Mobile:** responsivo; a página de verificação é prioridade no celular (é aberta via QR).
 
-## 5. Geração do PDF — fluxo AUTOMÁTICO (local, sem Canva) + fluxo manual (Claude + Canva)
+## 5. Geração do PDF — automática, local (weasyprint)
 
-Existem HOJE dois jeitos de gerar o PDF do atestado. O automático (principal)
-roda inteiramente no servidor, sem nenhum serviço externo. O manual (fallback)
-é uma conversa com a Claude usando o conector do Canva, útil quando o médico
-quer editar o documento à mão antes de entregar.
-
-### 5.1 Fluxo AUTOMÁTICO — HTML/CSS + weasyprint, direto no servidor
-
-Disparado sozinho sempre que um atestado é emitido (formulário, API ou MCP) **com
+O PDF do atestado é gerado inteiramente no servidor, sem nenhum serviço
+externo. Disparado sozinho sempre que um atestado é emitido (formulário, API ou MCP) **com
 o CPF do paciente informado** (campo opcional — sem CPF, nenhum PDF é gerado, mas
 o atestado e o QR são emitidos normalmente). Roda em segundo plano (thread), nunca
 trava a emissão; se falhar, o atestado continua válido e o dashboard oferece
@@ -278,37 +262,8 @@ funciona nativamente em Linux/Docker (é o ambiente de produção, no Railway).
 Se essas bibliotecas estiverem ausentes por algum motivo, o import de
 weasyprint é capturado (`src/documento_pdf.py` importa dentro de um
 `try/except` na subida) — o app inteiro continua funcionando normalmente, só
-a geração do PDF fica indisponível (mesma degradação graciosa que
-`CANVA_CLIENT_ID`/`SECRET` ausentes já tinha antes).
-
-> Este fluxo **não usa o Canva** — `src/canva_client.py`/`src/canva_admin.py`
-> e as variáveis `CANVA_*` continuam no código só por causa do fluxo manual
-> abaixo (que na verdade também não os usa — ver nota no fim da seção 5.2) e
-> não foram removidos por baixo risco de mantê-los. Ver seção 2 para o status
-> de cada variável `CANVA_*`.
-
-### 5.2 Fluxo MANUAL — conversa com a Claude (Canva)
-
-Numa conversa da Claude com os conectores **"AmorSaude Validação" (MCP)** + **Canva**:
-1. O usuário envia uma **ficha**: Nome, CPF, Data de início do afastamento, Quantidade de dias, CID.
-2. A Claude registra via **`registrar_atestado`** → recebe código + URL de verificação + link do QR.
-   - **O CPF NÃO vai para o registro** (fica só no documento) — decisão de LGPD.
-   - Período = início (data de início) + dias (quantidade de dias).
-3. A Claude edita o template do Canva **"TEMPLATE PARA CLAUDE"** (id `DAHO7Z4z7P8`):
-   - Substitui os textos do paciente (find_and_replace no parágrafo).
-   - Coloca o QR **no próprio elemento do QR** (que é editável) via `update_fill` — NÃO sobrepor.
-   - Garante que o CID no texto bata com o registro.
-4. Devolve o link do Canva pronto + código + URL de verificação.
-
-> PENDÊNCIA CONHECIDA (só deste fluxo manual): o fluxo de chat edita o
-> template ORIGINAL (sobrescreve a cada ficha). O correto seria **DUPLICAR o
-> template por ficha** e trabalhar na cópia. Baixa prioridade — uso pontual,
-> só quando o médico quer editar o documento à mão.
-
-> Este fluxo usa o conector Canva da própria conta da Claude (fora deste
-> repositório) — não passa por `src/canva_client.py`/`src/canva_admin.py` nem
-> pelo token OAuth guardado no banco pelo servidor (esse token existe só por
-> herança do antigo fluxo automático via Canva e hoje não é usado por nada).
+a geração do PDF fica indisponível (degradação graciosa, sem derrubar o
+processo).
 
 ## 6. Decisões e restrições importantes
 - Ferramenta de **apoio**, nunca "fraude confirmada".
@@ -338,7 +293,7 @@ Numa conversa da Claude com os conectores **"AmorSaude Validação" (MCP)** + **
   (retenção/exclusão de atestados) — ver seção 3. Não há parte pendente nesta
   frente.
 - O PDF gerado é cifrado em repouso (mesma `ENCRYPTION_KEY`) e é apagado junto
-  quando o atestado é anonimizado/excluído (Parte 4) — ver seção 5.1.
+  quando o atestado é anonimizado/excluído (Parte 4) — ver seção 5.
 - Código do QR deve ser **aleatório e imprevisível** (evitar enumeração/vazamento).
 - URLs geradas (base do QR/verificação) são **dinâmicas** (baseadas no domínio da
   requisição), para funcionar em localhost e em produção sem hardcode.
@@ -358,12 +313,10 @@ Numa conversa da Claude com os conectores **"AmorSaude Validação" (MCP)** + **
    testado com sucesso nesta sessão, rodando sem admin). Se `import
    weasyprint` falhar, o resto do app funciona normalmente — só a geração do
    PDF fica indisponível (degradação graciosa, sem derrubar o processo; ver
-   seção 5.1). Em produção (Docker/Railway) isso não é problema, pois o
+   seção 5). Em produção (Docker/Railway) isso não é problema, pois o
    Dockerfile já instala as bibliotecas necessárias.
 
 ## 8. Próximos passos / backlog
-- **Fluxo Canva manual (chat):** duplicar o template por ficha em vez de editar o
-  original — baixa prioridade, uso pontual (ver seção 5.2).
 - **Design:** continuar lapidando (as rodadas feitas cobriram ícones, tipografia,
   espaçamento, microinterações, cor, mobile, cabeçalho da verificação e tema
   claro/escuro da página pública).
@@ -372,7 +325,7 @@ Numa conversa da Claude com os conectores **"AmorSaude Validação" (MCP)** + **
   sentido para quem integra via API/MCP/Make/Zapier.
 - **Cidade/UF do CORPO do PDF:** hoje fixa em "Ribeirão Preto, - São Paulo" na
   linha de local/data perto da assinatura (`src/documento_pdf.py`) — diferente
-  do endereço do RODAPÉ, que já é por médico (ver seção 5.1). Considerar puxar
+  do endereço do RODAPÉ, que já é por médico (ver seção 5). Considerar puxar
   também essa linha do cadastro do médico se algum dia houver mais de uma unidade.
 
 ## 9. Como trabalhar neste projeto (preferências)

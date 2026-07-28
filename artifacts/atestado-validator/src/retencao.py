@@ -58,8 +58,8 @@ def anonimizar_atestado_manual(codigo: str, *, ator_usuario: str, ator_perfil: s
     """
     anonimizado = anonimizar_atestado(codigo)
     if anonimizado:
-        # O PDF gerado via Canva (se houver) carrega nome/CPF em claro dentro
-        # do documento — anonimizar só o registro no banco não adiantaria
+        # O PDF gerado (se houver) carrega nome/CPF em claro dentro do
+        # documento — anonimizar só o registro no banco não adiantaria
         # nada se essa cópia continuasse no disco.
         excluir_documento_gerado(codigo)
         registrar_evento(

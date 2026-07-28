@@ -1,14 +1,9 @@
 """
-documento_pdf.py — Gera o PDF do atestado diretamente no servidor, sem
-depender do Canva: monta um HTML/CSS fiel ao layout oficial da AmorSaúde e
-renderiza com weasyprint. Roda em segundo plano (thread daemon), nunca
-bloqueia a emissão do atestado; se falhar, o dashboard oferece "Tentar
-novamente" — mesmo contrato que a geração via Canva já tinha (ver
-tabela `documentos_atestado` em src/database.py, inalterada).
-
-O fluxo de chat (Claude + conector do Canva, documentado no CLAUDE.md seção
-5.2) continua funcionando por fora deste módulo — ele não chama nada daqui,
-só edita o template do Canva diretamente pela conversa.
+documento_pdf.py — Gera o PDF do atestado diretamente no servidor: monta um
+HTML/CSS fiel ao layout oficial da AmorSaúde e renderiza com weasyprint. Roda
+em segundo plano (thread daemon), nunca bloqueia a emissão do atestado; se
+falhar, o dashboard oferece "Tentar novamente" (ver tabela
+`documentos_atestado` em src/database.py).
 """
 
 from __future__ import annotations
@@ -26,8 +21,8 @@ try:
     # A importação do weasyprint carrega bibliotecas nativas do sistema
     # (Pango/GObject/fontconfig — ver Dockerfile). Se estiverem ausentes ou
     # mal configuradas, isso não pode derrubar o app inteiro na subida: só a
-    # geração do PDF fica indisponível (mesmo contrato de degradação
-    # graciosa que CANVA_CLIENT_ID/SECRET ausentes já tinham).
+    # geração do PDF fica indisponível (degradação graciosa — o resto do app
+    # continua funcionando normalmente).
     from weasyprint import HTML as _WeasyprintHTML
 except Exception:  # pragma: no cover - depende de bibliotecas de sistema
     _WeasyprintHTML = None

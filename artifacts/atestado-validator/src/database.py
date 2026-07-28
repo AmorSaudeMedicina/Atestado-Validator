@@ -212,41 +212,6 @@ CREATE TABLE IF NOT EXISTS documentos_atestado (
 """
 
 # ---------------------------------------------------------------------------
-# OAuth do Canva (servidor como CLIENTE, não como emissor) — ver
-# src/canva_client.py. Autorização feita uma única vez pelo admin em
-# /admin/canva/conectar; o token fica guardado aqui, cifrado, para uso e
-# renovação automática em segundo plano (nunca em variável de ambiente, nem
-# em texto puro).
-#
-# `canva_oauth_token` é uma tabela de UMA linha só (id fixo em 1) — só existe
-# uma conexão Canva por vez. `canva_oauth_state` guarda o par
-# state/code_verifier (PKCE) durante a ida-e-volta do navegador para o
-# Canva; cada linha expira em poucos minutos e é consumida uma única vez.
-# ---------------------------------------------------------------------------
-
-_CREATE_CANVA_OAUTH_TOKEN = """
-CREATE TABLE IF NOT EXISTS canva_oauth_token (
-    id                    INTEGER PRIMARY KEY CHECK (id = 1),
-    access_token_cifrado  TEXT NOT NULL,
-    refresh_token_cifrado TEXT NOT NULL,
-    expira_em             TEXT NOT NULL,
-    conectado_por         TEXT,
-    criado_em             TEXT NOT NULL DEFAULT (datetime('now','localtime')),
-    atualizado_em         TEXT NOT NULL DEFAULT (datetime('now','localtime'))
-)
-"""
-
-_CREATE_CANVA_OAUTH_STATE = """
-CREATE TABLE IF NOT EXISTS canva_oauth_state (
-    state         TEXT PRIMARY KEY,
-    code_verifier TEXT NOT NULL,
-    criado_por    TEXT,
-    expira_em     TEXT NOT NULL,
-    criado_em     TEXT NOT NULL DEFAULT (datetime('now','localtime'))
-)
-"""
-
-# ---------------------------------------------------------------------------
 # "Lembrar de mim" (sessão de longa duração) — ver src/lembrar_me.py.
 #
 # Um cookie httpOnly de verdade só pode ser definido por uma resposta HTTP
@@ -334,8 +299,6 @@ def init_db() -> None:
         for sql_indice in _CREATE_INDICES_AUDITORIA:
             conn.execute(sql_indice)
         conn.execute(_CREATE_DOCUMENTOS_ATESTADO)
-        conn.execute(_CREATE_CANVA_OAUTH_TOKEN)
-        conn.execute(_CREATE_CANVA_OAUTH_STATE)
         conn.execute(_CREATE_LEMBRAR_ME_HANDOFF)
         conn.execute(_CREATE_LEMBRAR_ME_TOKENS)
         conn.commit()
@@ -982,76 +945,6 @@ def remover_registro_documento(codigo: str) -> Optional[str]:
         conn.execute("DELETE FROM documentos_atestado WHERE codigo = ?", (codigo,))
         conn.commit()
     return row["caminho_arquivo"] if row else None
-
-
-# ---------------------------------------------------------------------------
-# OAuth do Canva (servidor como cliente) — ver src/canva_client.py.
-# ---------------------------------------------------------------------------
-
-def salvar_canva_oauth_token(
-    access_token_cifrado: str,
-    refresh_token_cifrado: str,
-    expira_em_iso: str,
-    conectado_por: Optional[str] = None,
-) -> None:
-    """
-    Grava (substituindo qualquer conexão anterior) o token OAuth do Canva —
-    tabela de uma linha só (id=1). Chamada tanto na autorização inicial
-    quanto a cada renovação automática (o refresh token do Canva é de uso
-    único: cada renovação grava um refresh token novo).
-    """
-    sql = """
-        INSERT INTO canva_oauth_token (id, access_token_cifrado, refresh_token_cifrado, expira_em, conectado_por)
-        VALUES (1, ?, ?, ?, ?)
-        ON CONFLICT(id) DO UPDATE SET
-            access_token_cifrado = excluded.access_token_cifrado,
-            refresh_token_cifrado = excluded.refresh_token_cifrado,
-            expira_em = excluded.expira_em,
-            conectado_por = COALESCE(excluded.conectado_por, canva_oauth_token.conectado_por),
-            atualizado_em = datetime('now','localtime')
-    """
-    with _conectar() as conn:
-        conn.execute(sql, (access_token_cifrado, refresh_token_cifrado, expira_em_iso, conectado_por))
-        conn.commit()
-
-
-def buscar_canva_oauth_token() -> Optional[dict]:
-    """Retorna a conexão Canva atual (tokens ainda cifrados — decifrar é responsabilidade do chamador), ou None se nunca autorizada."""
-    with _conectar() as conn:
-        row = conn.execute("SELECT * FROM canva_oauth_token WHERE id = 1").fetchone()
-    return dict(row) if row else None
-
-
-def remover_canva_oauth_token() -> None:
-    """Remove a conexão Canva atual — usada quando o admin desconecta explicitamente (ex.: antes de trocar de conta)."""
-    with _conectar() as conn:
-        conn.execute("DELETE FROM canva_oauth_token WHERE id = 1")
-        conn.commit()
-
-
-def criar_canva_oauth_state(state: str, code_verifier: str, criado_por: Optional[str] = None) -> None:
-    """Grava o par state/code_verifier (PKCE) durante a ida-e-volta do navegador para o Canva, válido por 10 minutos."""
-    sql = """
-        INSERT INTO canva_oauth_state (state, code_verifier, criado_por, expira_em)
-        VALUES (?, ?, ?, datetime('now','localtime','+10 minutes'))
-    """
-    with _conectar() as conn:
-        conn.execute(sql, (state, code_verifier, criado_por))
-        conn.commit()
-
-
-def consumir_canva_oauth_state(state: str) -> Optional[dict]:
-    """Busca e remove (uso único) um state ainda válido. Retorna o registro ou None se inexistente/expirado/já usado."""
-    with _conectar() as conn:
-        row = conn.execute(
-            "SELECT * FROM canva_oauth_state WHERE state = ? AND expira_em > datetime('now','localtime')",
-            (state,),
-        ).fetchone()
-        if not row:
-            return None
-        conn.execute("DELETE FROM canva_oauth_state WHERE state = ?", (state,))
-        conn.commit()
-        return dict(row)
 
 
 # ---------------------------------------------------------------------------
