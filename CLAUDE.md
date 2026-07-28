@@ -201,7 +201,15 @@ veredito de "fraude confirmada".
 - **Paleta:** verde-água/teal `#5FC2D4` (principal), coral `#D74846` (secundária),
   vermelho `#D53A31` (CTA/alerta), texto `#525050`, fundo `#EAF7F9`, branco `#FFFFFF`.
   Regra: coral/vermelho **só** para ações principais e alertas; verde-água como base.
-- **Logo:** no cabeçalho de todas as telas (arquivo em `assets/logo-amorsaude.png`).
+- **Logo:** no cabeçalho de todas as telas (arquivo em `assets/logo-amorsaude.png`,
+  PNG com transparência real (RGBA), gerado a partir do vetor original
+  `assets/logo-amorsaude1.svg` — esse `.svg` fica no repositório só como fonte,
+  não é lido pelo app). **Favicon** da página pública de verificação: recorte
+  quadrado só do ícone (sem a palavra "amorsaúde", que ficaria ilegível
+  minúscula) em `assets/favicon-amorsaude.png`, injetado via
+  `_definir_titulo_aba_publica()`/`components.html()` (mesma técnica do
+  título da aba — `st.set_page_config(page_icon=...)` é global ao processo,
+  não dá pra variar por tela).
 - **Tipografia:** **Nunito Sans** (escolhida por ser arredondada/quente como a marca,
   profissional e legível), com hierarquia clara de título/rótulo/corpo.
 - **Ícones:** conjunto de **ícones de linha** (SVG, estilo Lucide). **Sem emojis** na interface.

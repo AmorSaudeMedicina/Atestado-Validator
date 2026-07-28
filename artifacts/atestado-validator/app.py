@@ -153,6 +153,7 @@ def _svg(nome: str, tamanho: int = 16, cor: str = COR_PRIMARIA, estilo_extra: st
 
 
 _LOGO_PATH = Path(__file__).resolve().parent / "assets" / "logo-amorsaude.png"
+_FAVICON_PATH = Path(__file__).resolve().parent / "assets" / "favicon-amorsaude.png"
 
 # ---------------------------------------------------------------------------
 # Configuração da página
@@ -729,6 +730,14 @@ def _logo_base64() -> str | None:
     """Lê a logo e retorna em base64 para embutir no HTML. None se não existir."""
     if _LOGO_PATH.exists():
         return base64.b64encode(_LOGO_PATH.read_bytes()).decode()
+    return None
+
+
+@st.cache_data
+def _favicon_base64() -> str | None:
+    """Lê o favicon (recorte quadrado só do ícone, sem a palavra 'amorsaúde') e retorna em base64. None se não existir."""
+    if _FAVICON_PATH.exists():
+        return base64.b64encode(_FAVICON_PATH.read_bytes()).decode()
     return None
 
 
@@ -1633,16 +1642,42 @@ def _secao_documento_pdf_concluido(
 
 def _definir_titulo_aba_publica() -> None:
     """
-    Define o título da aba do navegador para a página pública de
-    verificação. `st.set_page_config()` é global (mesmo processo/script
-    para login, dashboard e admin), então não dá para diferenciar o título
-    por lá — em vez disso, `components.html()` renderiza um <iframe>
-    sandboxed que, com `allow-same-origin` (padrão do Streamlit), consegue
-    alcançar o documento pai só para ajustar `document.title`, sem navegar
-    nem alterar mais nada na página.
+    Define o título da aba do navegador e o favicon para a página pública
+    de verificação. `st.set_page_config()` (título/`page_icon`) é global
+    (mesmo processo/script para login, dashboard e admin), então não dá
+    para diferenciar nenhum dos dois por lá — em vez disso,
+    `components.html()` renderiza um <iframe> sandboxed que, com
+    `allow-same-origin` (padrão do Streamlit), consegue alcançar o
+    documento pai só para ajustar `document.title` e o `<link rel="icon">`,
+    sem navegar nem alterar mais nada na página.
+
+    O favicon usa um recorte quadrado só do ícone da logo (sem a palavra
+    "amorsaúde" — ver `_favicon_base64()`/`assets/favicon-amorsaude.png`),
+    já que a logo inteira é larga demais para ficar legível no tamanho
+    minúsculo de um ícone de aba. Os `<link rel="icon">` que o Streamlit já
+    injeta (a partir de `page_icon` em `st.set_page_config()`) são
+    removidos antes, para não competir com o novo.
     """
+    favicon_b64 = _favicon_base64()
+    favicon_js = ""
+    if favicon_b64:
+        favicon_js = f"""
+        (function() {{
+            parent.document.querySelectorAll('link[rel*="icon"]').forEach(function(el) {{ el.remove(); }});
+            var link = parent.document.createElement('link');
+            link.rel = 'icon';
+            link.type = 'image/png';
+            link.href = 'data:image/png;base64,{favicon_b64}';
+            parent.document.head.appendChild(link);
+        }})();
+        """
     components.html(
-        '<script>parent.document.title = "AmorSaúde — Validador de Atestados";</script>',
+        f"""
+        <script>
+        parent.document.title = "AmorSaúde — Validador de Atestados";
+        {favicon_js}
+        </script>
+        """,
         height=0,
     )
 
