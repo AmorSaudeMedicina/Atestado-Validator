@@ -143,9 +143,9 @@ veredito de "fraude confirmada".
   restante da página. **Reage a `prefers-color-scheme: dark`**: fundo
   branco/`#E0E0E0` no tema claro (via `var(--pub-cartao)`, igual ao resto
   da página), fundo escuro/borda discreta no tema escuro (via
-  `var(--pub-borda)`), com um "chip" branco atrás da logo só no escuro
-  (a logo tem detalhes/texto escuros que ficariam pouco legíveis direto
-  sobre o fundo escuro do cabeçalho). A barra nativa do Streamlit
+  `var(--pub-borda)`). A logo (PNG com transparência real, sem fundo
+  embutido) aparece direto sobre o fundo do cabeçalho em qualquer tema, sem
+  nenhum container/chip ao redor. A barra nativa do Streamlit
   (`stHeader`, botão "Deploy") e o padding-top padrão do container ficam
   escondidos/zerados só nesta tela (`.stApp:has(.st-key-pagina-publica)`),
   para o cabeçalho ficar colado no topo de verdade. Título da aba do navegador só

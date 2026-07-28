@@ -577,17 +577,12 @@ def _injetar_estilo() -> None:
         }}
         /* Tema escuro do cabeçalho: borda discreta no mesmo tom escuro do
            resto da página (reaproveita var(--pub-borda), já definida como
-           #2C3D41 no bloco @media (prefers-color-scheme: dark) lá em cima)
-           e um "chip" branco por trás da logo — a logo (PNG com fundo
-           transparente) pode ter texto/detalhes escuros que ficariam pouco
-           legíveis direto sobre o fundo escuro do cabeçalho. */
+           #2C3D41 no bloco @media (prefers-color-scheme: dark) lá em cima).
+           A logo (PNG com transparência real) aparece direto sobre o fundo
+           do cabeçalho em qualquer tema, sem nenhum container/chip ao redor. */
         @media (prefers-color-scheme: dark) {{
             .amorsaude-cabecalho-publico {{
                 border-bottom-color: var(--pub-borda);
-            }}
-            .amorsaude-cabecalho-publico a {{
-                background-color: #FFFFFF;
-                padding: 6px 10px;
             }}
         }}
         .amorsaude-cabecalho-publico img {{
@@ -790,12 +785,14 @@ def _barra_cabecalho(conteudo_direita: str = "") -> None:
 def _cabecalho_verificacao() -> None:
     """
     Cabeçalho da página pública de verificação, no estilo do site oficial
-    (amorsaude.com.br): faixa branca (#FFFFFF, sempre — não varia com o
-    tema claro/escuro) de largura total da página, com só a logo,
-    centralizada, altura fixa de 48px (forçada via CSS — ver
-    `.amorsaude-cabecalho-publico img` em `_injetar_estilo()`), e uma linha
-    fina de separação abaixo. A faixa de status (selo "Atestado
-    Autêntico"/etc.) continua separada, mais abaixo, sem mudança.
+    (amorsaude.com.br): faixa de largura total da página (fundo branco no
+    tema claro, escuro no tema escuro — `var(--pub-cartao)`, reativo a
+    `prefers-color-scheme: dark`), com só a logo, centralizada, altura fixa
+    de 48px (forçada via CSS — ver `.amorsaude-cabecalho-publico img` em
+    `_injetar_estilo()`), e uma linha fina de separação abaixo. A logo (PNG
+    com transparência real) aparece direto sobre o fundo do cabeçalho, sem
+    nenhum container/chip ao redor, em qualquer tema. A faixa de status
+    (selo "Atestado Autêntico"/etc.) continua separada, mais abaixo, sem mudança.
 
     A logo é um link clicável para o site oficial da AmorSaúde, aberto em nova aba.
     """
