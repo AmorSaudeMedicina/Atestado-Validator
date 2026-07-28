@@ -43,8 +43,9 @@ from src.oauth_server import (
 
 async def healthz(request: Request) -> Response:
     """
-    GET /healthz — usado pelo Replit (e por qualquer monitor externo) para
-    verificar se o processo está de pé e o banco de dados está acessível.
+    GET /healthz — usado pela hospedagem (Railway, ver healthcheckPath em
+    railway.toml) e por qualquer monitor externo para verificar se o processo
+    está de pé e o banco de dados está acessível.
     Não requer autenticação nem toca em dados de médico/paciente.
     """
     try:

@@ -93,10 +93,9 @@ atestado-validator/
 
 ---
 
-## Como executar (Replit)
+## Como executar (local)
 
-O app é iniciado automaticamente pelo workflow configurado.  
-Para rodar manualmente (só a interface Streamlit, sem API/MCP):
+Para rodar manualmente em desenvolvimento (só a interface Streamlit, sem API/MCP):
 
 ```bash
 cd artifacts/atestado-validator
