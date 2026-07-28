@@ -4,20 +4,20 @@ urls.py — Monta URLs públicas do app a partir do domínio real da requisiçã
 Compartilhado entre o app Streamlit (app.py), a API HTTP (src/api.py) e o
 conector MCP/OAuth (src/mcp_server.py, src/oauth_server.py) para garantir que
 o link de verificação, o QR Code e os endpoints OAuth sempre apontem para o
-MESMO domínio que o chamador de fato usou — funciona tanto no domínio de
-desenvolvimento (`*.replit.dev`) quanto no domínio publicado (`*.replit.app`
-ou um domínio customizado), sem precisar trocar nada manualmente ao publicar.
+MESMO domínio que o chamador de fato usou — funciona tanto no domínio público
+do Railway (`*.up.railway.app`) quanto num domínio customizado, sem precisar
+trocar nada manualmente ao publicar.
 
 Prioridade para descobrir o domínio, da mais para a menos confiável:
 1. Uma requisição HTTP explícita (Starlette `Request`, passada por quem chama)
-   — lida o host real através de `X-Forwarded-Host`/`Host` (o proxy do Replit
-   sempre preenche esses cabeçalhos corretamente, tanto em dev quanto em
-   produção).
+   — lida o host real através de `X-Forwarded-Host`/`Host` (o proxy do Railway
+   sempre preenche esses cabeçalhos corretamente).
 2. O contexto da página Streamlit (`st.context.url`) — usado quando o código
    roda dentro do script do app (ex.: `app.py`) sem acesso direto ao objeto
    `Request` do Starlette.
-3. Variáveis de ambiente do Replit (`REPLIT_DEV_DOMAIN`), só como último
-   recurso para contextos sem requisição alguma (ex.: um script batch).
+3. Variáveis de ambiente da hospedagem (`PUBLIC_BASE_URL`,
+   `RAILWAY_PUBLIC_DOMAIN`), só como último recurso para contextos sem
+   requisição alguma (ex.: um script batch).
 """
 
 from __future__ import annotations
@@ -30,10 +30,10 @@ from urllib.parse import urlparse
 if TYPE_CHECKING:
     from starlette.requests import Request
 
-# Sufixos de domínio confiáveis para aceitar via cabeçalho (dev e produção no
-# Replit e no Railway). Um domínio customizado, se o usuário configurar um na
-# publicação, pode ser adicionado aqui através da env var
-# PUBLIC_HOST_SUFFIXES_EXTRA (lista separada por vírgula, ex.: "meudominio.com.br").
+# Sufixos de domínio confiáveis para aceitar via cabeçalho (produção no
+# Railway). Um domínio customizado, se o usuário configurar um na publicação,
+# pode ser adicionado aqui através da env var PUBLIC_HOST_SUFFIXES_EXTRA
+# (lista separada por vírgula, ex.: "meudominio.com.br").
 #
 # `.up.railway.app` é o domínio público padrão gerado pelo Railway; `.railway.app`
 # cobre variações/domínios internos do Railway. Sem esses sufixos, atrás do proxy
@@ -42,8 +42,6 @@ if TYPE_CHECKING:
 # o metadata OAuth/MCP saía apontando para http://localhost:5000 — quebrando o
 # Dynamic Client Registration da Claude com "mcp_registration_failed".
 _SUFIXOS_HOST_CONFIAVEIS = (
-    ".replit.dev",
-    ".replit.app",
     ".up.railway.app",
     ".railway.app",
     "localhost",
@@ -63,7 +61,7 @@ def _hosts_extra_confiaveis() -> tuple[str, ...]:
 
 def _host_e_confiavel(host: str) -> bool:
     """
-    Só aceita hosts que batem com um domínio conhecido do Replit (dev/prod)
+    Só aceita hosts que batem com um domínio conhecido da hospedagem (Railway)
     ou um domínio customizado explicitamente liberado via env var — nunca um
     valor arbitrário vindo de `Host`/`X-Forwarded-Host`. Isso evita que um
     cabeçalho forjado (host header injection) seja usado para gerar QR Codes,
@@ -83,7 +81,7 @@ def _host_e_confiavel(host: str) -> bool:
 def _protocolo_da_requisicao(request: "Request") -> str:
     """
     Resolve 'http' ou 'https' a partir de X-Forwarded-Proto (proxy do
-    Railway/Replit) — a conexão INTERNA entre o proxy e o processo costuma
+    Railway) — a conexão INTERNA entre o proxy e o processo costuma
     ser HTTP simples mesmo quando o usuário final acessa via HTTPS, então
     `request.url.scheme` sozinho não é confiável nesse cenário.
     """
@@ -139,7 +137,7 @@ def url_base(request: "Request | None" = None) -> str:
     Passe `request` sempre que estiver dentro de um handler HTTP (Starlette) —
     é a fonte mais confiável. Sem `request`, tenta o contexto da página
     Streamlit; se nada disso estiver disponível, cai para as variáveis de
-    ambiente da hospedagem (Railway/Replit) ou localhost (execução local avulsa).
+    ambiente da hospedagem (Railway) ou localhost (execução local avulsa).
     """
     if request is not None:
         base = _base_a_partir_da_requisicao(request)
@@ -166,10 +164,6 @@ def url_base(request: "Request | None" = None) -> str:
     dominio_railway = os.environ.get("RAILWAY_PUBLIC_DOMAIN", "").strip()
     if dominio_railway:
         return f"https://{dominio_railway}/"
-
-    dominio = os.environ.get("REPLIT_DEV_DOMAIN", "")
-    if dominio:
-        return f"https://{dominio}/"
 
     return "http://localhost:5000/"
 
