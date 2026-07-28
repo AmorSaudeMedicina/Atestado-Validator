@@ -556,7 +556,11 @@ def _injetar_estilo() -> None:
             margin-top: -48px;
             width: 100vw;
             display: flex; justify-content: center; align-items: center;
-            background-color: #FFFFFF;
+            /* var(--pub-cartao) já é reativo ao tema (definido lá em cima,
+               dentro de @media (prefers-color-scheme: dark)): #FFFFFF no
+               claro (igual a antes), escuro no escuro — sem precisar de
+               media query própria aqui para o fundo. */
+            background-color: var(--pub-cartao);
             padding: 16px 1.5rem;
             margin-bottom: 1.25rem;
             border-bottom: 1px solid #E0E0E0;
@@ -569,6 +573,21 @@ def _injetar_estilo() -> None:
         .amorsaude-cabecalho-publico a:active {{ transform: translateY(0); }}
         .amorsaude-cabecalho-publico a:focus-visible {{
             outline: 2px solid var(--pub-primaria); outline-offset: 4px;
+        }}
+        /* Tema escuro do cabeçalho: borda discreta no mesmo tom escuro do
+           resto da página (reaproveita var(--pub-borda), já definida como
+           #2C3D41 no bloco @media (prefers-color-scheme: dark) lá em cima)
+           e um "chip" branco por trás da logo — a logo (PNG com fundo
+           transparente) pode ter texto/detalhes escuros que ficariam pouco
+           legíveis direto sobre o fundo escuro do cabeçalho. */
+        @media (prefers-color-scheme: dark) {{
+            .amorsaude-cabecalho-publico {{
+                border-bottom-color: var(--pub-borda);
+            }}
+            .amorsaude-cabecalho-publico a {{
+                background-color: #FFFFFF;
+                padding: 6px 10px;
+            }}
         }}
         .amorsaude-cabecalho-publico img {{
             max-height: 48px !important;
