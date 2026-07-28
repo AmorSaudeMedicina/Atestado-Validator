@@ -152,7 +152,17 @@ veredito de "fraude confirmada".
   nesta tela ("AmorSaúde — Validador de Atestados"), via
   `_definir_titulo_aba_publica()`/`components.html()` (`st.set_page_config()`
   é global ao processo, não dá para variar por tela). Inclui metadados de
-  verificação e sinais de confiança.
+  verificação e sinais de confiança. Microinterações (CSS puro, só nesta
+  tela): círculo do selo **pulsa suavemente** (`amorsaude-selo-circulo-
+  pulsante`/`@keyframes amorsaude-pulso`, escala 1→1.06→1, 2s, infinito) só
+  no estado "Autêntico" — revogado/não encontrado/anonimizado nunca pulsam,
+  já que `_selo_status(pulsar=...)` controla isso por chamada; logo do
+  cabeçalho tem um brilho diagonal que desliza uma vez a cada hover
+  (`::after` com gradiente, `@keyframes amorsaude-shimmer`); e o `st.spinner()`
+  usado ao consultar o atestado (`data-testid="stSpinnerIcon"`) troca o ícone
+  padrão do Streamlit por um giro simples na cor da marca — o fundo
+  `#EAF7F9` e a logo centralizada já ficam visíveis por trás dele porque
+  `_cabecalho_verificacao()` roda antes do spinner.
 - **Revogação:** o médico revoga; a verificação passa a mostrar "revogado/inválido".
 - **API REST:** registra atestado programaticamente, autenticada por **token por
   médico** (gerado/revogado pelo admin no painel — ver seção 3); retorna código

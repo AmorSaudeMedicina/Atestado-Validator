@@ -569,11 +569,35 @@ def _injetar_estilo() -> None:
         .amorsaude-cabecalho-publico a {{
             display: inline-flex; line-height: 0; border-radius: 8px;
             transition: opacity 160ms ease, transform 160ms ease;
+            /* position:relative + overflow:hidden dão o "palco" pro brilho
+               (::after logo abaixo) deslizar sem vazar pra fora da logo. */
+            position: relative;
+            overflow: hidden;
         }}
         .amorsaude-cabecalho-publico a:hover {{ opacity: 0.82; transform: translateY(-1px); }}
         .amorsaude-cabecalho-publico a:active {{ transform: translateY(0); }}
         .amorsaude-cabecalho-publico a:focus-visible {{
             outline: 2px solid var(--pub-primaria); outline-offset: 4px;
+        }}
+        /* Efeito "shimmer" no hover da logo: uma faixa de luz diagonal
+           desliza da esquerda pra direita uma vez a cada vez que o mouse
+           entra. Fica parado (translateX(-100%), fora da vista à esquerda)
+           até o :hover disparar a animação. */
+        .amorsaude-cabecalho-publico a::after {{
+            content: "";
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: linear-gradient(115deg, transparent 0%, rgba(255,255,255,0.4) 50%, transparent 100%);
+            transform: translateX(-100%);
+            pointer-events: none;
+        }}
+        .amorsaude-cabecalho-publico a:hover::after {{
+            animation: amorsaude-shimmer 0.6s ease-in-out 1;
+        }}
+        @keyframes amorsaude-shimmer {{
+            from {{ transform: translateX(-100%); }}
+            to {{ transform: translateX(200%); }}
         }}
         /* Tema escuro do cabeçalho: borda discreta no mesmo tom escuro do
            resto da página (reaproveita var(--pub-borda), já definida como
@@ -591,6 +615,49 @@ def _injetar_estilo() -> None:
             width: auto !important;
             object-fit: contain !important;
             display: block !important;
+        }}
+
+        /* Pulso suave e contínuo no círculo do selo "Atestado Autêntico"
+           (ver `_selo_status(pulsar=True)`) — os outros estados (revogado,
+           não encontrado, anonimizado) nunca recebem essa classe. */
+        .amorsaude-selo-circulo-pulsante {{
+            animation: amorsaude-pulso 2s ease-in-out infinite;
+        }}
+        @keyframes amorsaude-pulso {{
+            0%, 100% {{ transform: scale(1); }}
+            50% {{ transform: scale(1.06); }}
+        }}
+
+        /* Loading customizado da página pública: o fundo #EAF7F9 já cobre
+           qualquer estado de carregamento (ver `.stApp:has(.st-key-pagina-
+           publica)` acima, aplicado assim que o CSS injeta — inclusive
+           durante reruns). Aqui trocamos só o ícone do `st.spinner()` (usado
+           ao consultar o atestado no banco) pelo giro simples na cor
+           verde-água da marca, no lugar do ícone padrão do Streamlit — a
+           logo já fica visível centralizada no cabeçalho, acima do spinner,
+           porque `_cabecalho_verificacao()` roda antes do `st.spinner()`. */
+        .stApp:has(.st-key-pagina-publica) [data-testid="stSpinnerIcon"] {{
+            display: none !important;
+        }}
+        .stApp:has(.st-key-pagina-publica) [data-testid="stSpinner"] > div {{
+            display: flex !important;
+            align-items: center;
+            gap: 0.6rem;
+        }}
+        .stApp:has(.st-key-pagina-publica) [data-testid="stSpinner"] > div::before {{
+            content: "";
+            width: 18px; height: 18px;
+            border: 3px solid rgba(95,194,212,0.25);
+            border-top-color: {COR_PRIMARIA};
+            border-radius: 50%;
+            flex-shrink: 0;
+            animation: amorsaude-girar 0.8s linear infinite;
+        }}
+        .stApp:has(.st-key-pagina-publica) [data-testid="stSpinner"] p {{
+            color: {COR_PRIMARIA} !important;
+        }}
+        @keyframes amorsaude-girar {{
+            to {{ transform: rotate(360deg); }}
         }}
 
         /* ─────────────────────────────────────────────
@@ -823,12 +890,18 @@ def _caixa_mensagem(texto: str, cor_fundo: str, cor_texto: str = COR_BRANCO, ico
     )
 
 
-def _selo_status(icone_svg: str, titulo: str, cor: str, cor_fundo: str, subtitulo: str = "") -> None:
+def _selo_status(icone_svg: str, titulo: str, cor: str, cor_fundo: str, subtitulo: str = "", pulsar: bool = False) -> None:
     """Selo grande e inequívoco de status, no padrão de validadores oficiais (gov.br/ITI, Atesta CFM).
 
     `subtitulo` é sempre escapado aqui — hardening defensivo, mesmo que os
     chamadores atuais já escapem valores dinâmicos (ex.: revogado_em) antes
     de passá-los, para evitar regressões se um novo call site esquecer disso.
+
+    `pulsar=True` (só usado no estado "Autêntico") aplica uma animação
+    suave e contínua de escala no círculo do ícone — ver
+    `.amorsaude-selo-circulo-pulsante`/`@keyframes amorsaude-pulso` em
+    `_injetar_estilo()`. Os outros estados (revogado, não encontrado,
+    anonimizado) nunca pulsam.
     """
     subtitulo_html = (
         f'<p style="color:var(--pub-texto); font-size:0.9375rem; max-width:32rem; '
@@ -837,10 +910,11 @@ def _selo_status(icone_svg: str, titulo: str, cor: str, cor_fundo: str, subtitul
         if subtitulo
         else ""
     )
+    classe_circulo = "amorsaude-selo-circulo amorsaude-selo-circulo-pulsante" if pulsar else "amorsaude-selo-circulo"
     st.markdown(
         f"""
         <div class="amorsaude-selo" style="text-align:center; padding:2rem 1rem 1rem 1rem; font-family:'Nunito Sans',sans-serif;">
-            <div class="amorsaude-selo-circulo" style="width:80px; height:80px; border-radius:50%; background-color:{cor_fundo};
+            <div class="{classe_circulo}" style="width:80px; height:80px; border-radius:50%; background-color:{cor_fundo};
                         display:flex; align-items:center; justify-content:center; margin:0 auto 1.25rem auto;
                         box-shadow:0 2px 12px rgba(0,0,0,0.08);">
                 {icone_svg}
@@ -1747,6 +1821,7 @@ def tela_verificacao(codigo: str) -> None:
                             titulo="Atestado Autêntico",
                             cor="var(--pub-cor-autentico)",
                             cor_fundo="var(--pub-cor-autentico-fundo)",
+                            pulsar=True,
                         )
 
                     if status != "anonimizado":
