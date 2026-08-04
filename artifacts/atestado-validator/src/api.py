@@ -24,7 +24,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
 from src.audit import EVENTO_ATESTADO_EMITIDO, ORIGEM_API, registrar_evento
-from src.documento_pdf import disparar_geracao_documento
+from src.documento_pdf import disparar_geracao_documento, ler_documento
 from src.database import buscar_atestado_por_codigo, buscar_medico_por_token_hash, salvar_atestado
 from src.qr_generator import gerar_qr
 from src.api_tokens import hash_token
@@ -304,4 +304,45 @@ async def obter_qr_code(request: Request) -> Response:
         content=qr_bytes,
         media_type="image/png",
         headers=_HEADERS_QR,
+    )
+
+
+async def obter_pdf(request: Request) -> Response:
+    """
+    GET /atestados/{codigo}/pdf
+
+    Cabeçalho: Authorization: Bearer <token do médico>
+
+    Devolve o PDF (já pronto e decifrado) de um atestado, para integrações
+    (ex.: envio automático por WhatsApp após pagamento). Diferente da imagem
+    do QR — que é pública porque não expõe dado pessoal —, o PDF carrega nome
+    e CPF do paciente, então exige o token do médico e só libera o PDF de um
+    atestado emitido por ESSE médico.
+
+    Respostas:
+        200  application/pdf  (o arquivo)
+        401  token ausente/inválido
+        403  o atestado não pertence ao médico do token
+        404  atestado inexistente, ou PDF ainda não gerado / indisponível
+    """
+    medico, erro_auth = _autenticar_medico(request)
+    if erro_auth is not None:
+        return erro_auth
+
+    codigo = request.path_params["codigo"]
+    atestado = buscar_atestado_por_codigo(codigo)
+    if not atestado:
+        return _erro(404, "Atestado não encontrado.")
+    if atestado.get("crm") != medico.get("crm"):
+        return _erro(403, "Este atestado não pertence ao médico do token.")
+
+    pdf_bytes = ler_documento(codigo)
+    if not pdf_bytes:
+        # Ainda em geração (assíncrona) ou nunca gerado (ex.: emitido sem CPF).
+        return _erro(404, "PDF ainda não está disponível (em geração ou não gerado).")
+
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="atestado-{codigo}.pdf"'},
     )

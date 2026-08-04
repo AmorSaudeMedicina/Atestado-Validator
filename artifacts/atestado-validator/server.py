@@ -28,7 +28,7 @@ from src.audit import limpar_eventos_antigos
 from src.auth import semear_usuarios_iniciais
 from src.auth_routes import lembrar_me_handoff
 from src.database import init_db
-from src.api import obter_qr_code, registrar_atestado
+from src.api import obter_pdf, obter_qr_code, registrar_atestado
 from src.retencao import aplicar_retencao_automatica
 from src.mcp_server import mcp_endpoint
 from src.oauth_server import (
@@ -135,6 +135,7 @@ app = App(
         Route("/healthz", healthz, methods=["GET"]),
         Route("/atestados", registrar_atestado, methods=["POST"]),
         Route("/atestados/{codigo}/qrcode.png", obter_qr_code, methods=["GET", "OPTIONS"]),
+        Route("/atestados/{codigo}/pdf", obter_pdf, methods=["GET"]),
         Route("/mcp", mcp_endpoint, methods=["GET", "POST"]),
         Route("/.well-known/oauth-authorization-server", metadados_authorization_server, methods=["GET"]),
         Route("/.well-known/oauth-protected-resource", metadados_protected_resource, methods=["GET"]),
