@@ -17,6 +17,7 @@ nunca um valor escolhido livremente por quem chama.
 from __future__ import annotations
 
 import json
+import os
 from datetime import date, datetime, timedelta
 import secrets as _secrets
 
@@ -25,7 +26,12 @@ from starlette.responses import JSONResponse, Response
 
 from src.audit import EVENTO_ATESTADO_EMITIDO, ORIGEM_API, registrar_evento
 from src.documento_pdf import disparar_geracao_documento, ler_documento
-from src.database import buscar_atestado_por_codigo, buscar_medico_por_token_hash, salvar_atestado
+from src.database import (
+    buscar_atestado_por_codigo,
+    buscar_medico_por_cidade,
+    buscar_medico_por_token_hash,
+    salvar_atestado,
+)
 from src.qr_generator import gerar_qr
 from src.api_tokens import hash_token
 from src.urls import url_qr_publica, url_verificacao
@@ -60,6 +66,28 @@ def _autenticar_medico(request: Request) -> tuple[dict | None, JSONResponse | No
         return None, _erro(401, "Token de API inválido, revogado ou de médico inativo.")
 
     return medico, None
+
+
+def _autenticar_integracao(request: Request) -> bool:
+    """
+    True se a requisição trouxe a CHAVE DE INTEGRAÇÃO correta (variável de
+    ambiente `INTEGRACAO_API_KEY`), enviada como 'Authorization: Bearer
+    <chave>' (ou X-API-Token). Diferente do token por médico, esta é uma
+    única chave usada pela automação (n8n): ela não representa um médico —
+    quem assina o atestado é resolvido pela cidade (ver
+    `registrar_atestado_integracao`).
+
+    Fail-closed: se a env não estiver definida, a integração fica DESLIGADA
+    (sempre False). Comparação em tempo constante para não vazar a chave por
+    diferença de tempo de resposta.
+    """
+    esperada = os.environ.get("INTEGRACAO_API_KEY", "").strip()
+    if not esperada:
+        return False
+    apresentada = _extrair_token(request)
+    if not apresentada:
+        return False
+    return _secrets.compare_digest(apresentada, esperada)
 
 
 def _parse_data(valor: str, campo: str) -> date:
@@ -266,6 +294,61 @@ async def registrar_atestado(request: Request) -> Response:
     return JSONResponse(resultado, status_code=201)
 
 
+async def registrar_atestado_integracao(request: Request) -> Response:
+    """
+    POST /integracao/atestados
+
+    Emissão pela AUTOMAÇÃO (n8n), autenticada por uma única CHAVE DE
+    INTEGRAÇÃO (env `INTEGRACAO_API_KEY`, cabeçalho 'Authorization: Bearer
+    <chave>') — e NÃO pelo token de um médico. O médico que assina é
+    resolvido pelo backend a partir do campo 'cidade' do corpo, cruzando com
+    o endereço cadastrado de cada médico no painel (`endereco_cidade`). Assim
+    o mapa cidade→médico vive só no painel: cadastrou um médico com a cidade
+    dele, a automação já passa a emitir por ele, sem tocar no n8n.
+
+    Corpo JSON: os MESMOS campos de POST /atestados, mais:
+        cidade (str, obrigatório) — escolhe o médico que assina o atestado.
+
+    Respostas:
+        201  atestado emitido (mesmo corpo de /atestados + 'medico_usuario')
+        401  chave de integração ausente/errada (ou integração desligada)
+        404  nenhum médico ativo cadastrado para a cidade informada
+        422  'cidade' ausente ou dados do atestado inválidos
+    """
+    if not _autenticar_integracao(request):
+        return _erro(401, "Chave de integração ausente ou inválida.")
+
+    try:
+        corpo = await request.json()
+    except json.JSONDecodeError:
+        return _erro(400, "Corpo da requisição deve ser um JSON válido.")
+    if not isinstance(corpo, dict):
+        return _erro(400, "Corpo da requisição deve ser um objeto JSON.")
+
+    cidade = str(corpo.get("cidade") or "").strip()
+    if not cidade:
+        return _erro(422, "Campo 'cidade' é obrigatório para emitir via integração.")
+
+    medicos = buscar_medico_por_cidade(cidade)
+    if not medicos:
+        return _erro(404, f"Nenhum médico ativo cadastrado para a cidade '{cidade}'.")
+    # Se houver mais de um médico na mesma cidade, usa o mais antigo (a lista
+    # já vem ordenada por id) — resultado determinístico. Refinar por UF/
+    # unidade fica para quando houver esse caso de fato.
+    medico = medicos[0]
+
+    try:
+        resultado = registrar_atestado_core(medico, corpo, ORIGEM_API, request)
+    except ErroValidacaoAtestado as exc:
+        return _erro(422, str(exc))
+    except Exception:
+        return _erro(500, "Erro interno ao salvar o atestado. Tente novamente.")
+
+    # Informa qual médico assinou — útil para a automação registrar/depurar.
+    resultado["medico_usuario"] = medico["usuario"]
+    return JSONResponse(resultado, status_code=201)
+
+
 _HEADERS_QR = {
     # Permite que qualquer servidor externo (Make, Zapier, etc.) busque
     # a imagem diretamente, inclusive via fetch de browser (sem bloqueio CORS).
@@ -316,24 +399,34 @@ async def obter_pdf(request: Request) -> Response:
     Devolve o PDF (já pronto e decifrado) de um atestado, para integrações
     (ex.: envio automático por WhatsApp após pagamento). Diferente da imagem
     do QR — que é pública porque não expõe dado pessoal —, o PDF carrega nome
-    e CPF do paciente, então exige o token do médico e só libera o PDF de um
-    atestado emitido por ESSE médico.
+    e CPF do paciente, então exige autenticação.
+
+    Dois modos de autenticação são aceitos:
+      - Token do médico (Bearer): só libera o PDF de um atestado emitido por
+        ESSE médico.
+      - Chave de integração (Bearer `INTEGRACAO_API_KEY`): usada pela
+        automação (n8n) para baixar o PDF de qualquer atestado que ela mesma
+        emitiu via /integracao/atestados — como o médico é escolhido pela
+        cidade, a automação não tem o token dele para baixar depois.
 
     Respostas:
         200  application/pdf  (o arquivo)
-        401  token ausente/inválido
-        403  o atestado não pertence ao médico do token
+        401  token/chave ausente ou inválido
+        403  o atestado não pertence ao médico do token (modo token)
         404  atestado inexistente, ou PDF ainda não gerado / indisponível
     """
-    medico, erro_auth = _autenticar_medico(request)
-    if erro_auth is not None:
-        return erro_auth
+    via_integracao = _autenticar_integracao(request)
+    medico = None
+    if not via_integracao:
+        medico, erro_auth = _autenticar_medico(request)
+        if erro_auth is not None:
+            return erro_auth
 
     codigo = request.path_params["codigo"]
     atestado = buscar_atestado_por_codigo(codigo)
     if not atestado:
         return _erro(404, "Atestado não encontrado.")
-    if atestado.get("crm") != medico.get("crm"):
+    if not via_integracao and atestado.get("crm") != medico.get("crm"):
         return _erro(403, "Este atestado não pertence ao médico do token.")
 
     pdf_bytes = ler_documento(codigo)

@@ -398,6 +398,47 @@ def buscar_medico_por_crm(crm: str) -> Optional[dict]:
     return dict(row) if row else None
 
 
+def _normalizar_cidade(valor: Optional[str]) -> str:
+    """
+    Normaliza um nome de cidade para comparação tolerante: remove acentos,
+    tira espaços das pontas, colapsa espaços internos e passa para caixa
+    baixa. Assim 'São Paulo', ' sao paulo ' e 'SAO  PAULO' batem entre si —
+    o paciente digita a cidade de qualquer jeito no WhatsApp e ainda casa
+    com o que o médico cadastrou no painel.
+    """
+    if not valor:
+        return ""
+    import unicodedata
+
+    texto = unicodedata.normalize("NFKD", str(valor))
+    texto = "".join(c for c in texto if not unicodedata.combining(c))
+    return " ".join(texto.split()).casefold()
+
+
+def buscar_medico_por_cidade(cidade: str) -> list[dict]:
+    """
+    Retorna os médicos ATIVOS cujo endereço cadastrado (`endereco_cidade`,
+    preenchido no painel do admin) bate com `cidade`, comparando de forma
+    tolerante a acentos/caixa/espaços (ver `_normalizar_cidade`). Usada pela
+    emissão via integração (n8n) para descobrir quem assina o atestado de
+    cada cidade sem manter esse mapa fora do painel.
+
+    Lista vazia se nenhum médico atende a cidade. Ordenada por `id` (o mais
+    antigo primeiro) para um resultado determinístico caso mais de um médico
+    esteja cadastrado na mesma cidade.
+    """
+    alvo = _normalizar_cidade(cidade)
+    if not alvo:
+        return []
+    sql = "SELECT * FROM usuarios WHERE perfil = 'medico' AND ativo = 1 ORDER BY id"
+    with _conectar() as conn:
+        rows = conn.execute(sql).fetchall()
+    return [
+        dict(r) for r in rows
+        if _normalizar_cidade(dict(r).get("endereco_cidade")) == alvo
+    ]
+
+
 def definir_status_usuario(usuario_id: int, ativo: bool) -> bool:
     """Ativa ou desativa uma conta. Retorna True se algum registro foi alterado."""
     sql = "UPDATE usuarios SET ativo = ? WHERE id = ?"
